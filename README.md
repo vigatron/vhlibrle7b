@@ -62,7 +62,7 @@ Each data span begins with a 1-byte control header (`ctrl`):
 ## Integration & Requirements
 
 ### Requirements
-* C++17 or higher
+* C++11 or higher
 * 32-bit aligned memory buffers for source and destination arrays
 
 ### Debug Mode

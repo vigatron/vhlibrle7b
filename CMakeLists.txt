@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(vhlibrle7b VERSION 0.0.2 LANGUAGES CXX)
+project(vhlibrle7b VERSION 0.0.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -11,7 +11,7 @@ configure_file(
 add_library(vhlib_rle7b INTERFACE)
 
 target_sources(vhlib_rle7b INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/vhrle7b.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vhlibrle7b.hpp
 )
 
 target_include_directories(vhlib_rle7b INTERFACE

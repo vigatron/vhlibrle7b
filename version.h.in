@@ -6,7 +6,7 @@
 #define VHLIB_RLE7B_VERSION_PATCH @PROJECT_VERSION_PATCH@
 
 #define VHLIB_RLE7B_VERSION_HEX ((VHLIB_RLE7B_VERSION_MAJOR * 10000) + \
-                                    (VHLIB_RLE7B_MINOR * 100) + \
-                                     VHLIB_RLE7B_VERSION_PATCH)
+                                (VHLIB_RLE7B_VERSION_MINOR * 100) + \
+                                VHLIB_RLE7B_VERSION_PATCH)
 
 #endif // VHLIB_RLE7B_VERSION_H

@@ -1,14 +1,14 @@
 /* ======================================================================================
  * Library       : vhlibrle7b
  * Description   : C++ library implementing a 7-bit Run-Length Encoding (RLE) algorithm
- * Revision      : 0.0.3
+ * Revision      : 0.0.4
  * Source        : https://github.com/vigatron/vhlibrle7b
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
- * Content size  : 12937
- * Date / Time   : 12-08-2026 17:13:31
- * MD5           : 63531f80b94c4a29de2714721ef620f8
+ * Content size  : 13142
+ * Date / Time   : 12-08-2026 20:36:06
+ * MD5           : 39c7a25dde4d7341111f91f9200dfa75
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -206,7 +206,7 @@ class VHRLE7b {
 
             // Copy header to destination buffer start
             sthdr hdr;
-            std::memcpy(hdr.pfx, hdrpfx, sizeof(hdr.pfx));
+            std::memcpy(hdr.pfx, get_hdrpfx(), sizeof(hdr.pfx));
             hdr.spans = spans_count;
             hdr.srcsize = srcsize;
             hdr.crc32src = crc32(srcptr, srcsize);
@@ -247,7 +247,7 @@ class VHRLE7b {
 
             // Check pfx
             for(size_t i = 0; i < sizeof(sthdr::pfx); i++)
-                if(hdr.pfx[i] != hdrpfx[i])
+                if(hdr.pfx[i] != get_hdrpfx()[i])
                     return errSrcInvalid;
 
             // Check rlesrc size
@@ -365,7 +365,15 @@ class VHRLE7b {
 
         private:
 
-            static constexpr uint8_t hdrpfx[8] = {'V', 'H', 'R', 'L', 'E', '7', 'b', ' '};
+            /**
+             *
+             */
+            static const uint8_t* get_hdrpfx() {
+                    static const uint8_t pfx[8] = {
+                        'V', 'H', 'R', 'L', 'E', '7', 'b', ' '
+                    };
+                    return pfx;
+                }
 
             /**
              *
@@ -403,9 +411,9 @@ class VHRLE7b {
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp
- * Revision         : 0.0.3
- * Content size     : 12937
- * Date / Time      : 12-08-2026 17:13:31
- * MD5              : 63531f80b94c4a29de2714721ef620f8
+ * Revision         : 0.0.4
+ * Content size     : 13142
+ * Date / Time      : 12-08-2026 20:36:06
+ * MD5              : 39c7a25dde4d7341111f91f9200dfa75
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

@@ -1,7 +1,7 @@
 ---
 title: "vhlibrle7b"
 description: "Embedded 7-bit RLE Compression Library"
-image: "/docs/vhlibrle7b_logo_1000x1000_transparent.png"
+image: "docs/vhlibrle7b_logo_1000x1000_transparent.png"
 ---
 
 

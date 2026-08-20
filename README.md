@@ -1,3 +1,9 @@
+---
+title: "vhlibrle7b"
+description: "Embedded 7-bit RLE Compression Library"
+image: "/docs/vhlibrle7b_logo_1000x1000_transparent.png"
+---
+
 # vhlibrle7b — Embedded 7-bit RLE Compression Library
 
 [![Revision](https://img.shields.io/badge/revision-0.0.4-blue.svg)](https://github.com/vigatron/vhlibrle7b)
@@ -15,7 +21,7 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 
 * **Repository:** [https://github.com/vigatron/vhlibrle7b](https://github.com/vigatron/vhlibrle7b)
 * **Revision:** `0.0.4`
-* **Header Path:** `src/extmods/vhlibrle7b/src/vhlibrle7b.hpp`
+* **Header Path:** `src/vhlibrle7b.hpp`
 * **Author:** Viktor Glebov (`V01G04A81`)
 * **Copyright:** © 2026 Viktor Glebov
 * **License:** [MIT](https://opensource.org/licenses/MIT)

@@ -1,8 +1,17 @@
 <head>
+
+<!-- Существующие Open Graph теги -->
   <meta name="description" content="Lightweight header-only C++11 library for 7-bit RLE compression on ARM Cortex-M, ESP32, and STM32.">
   <meta property="og:title" content="vhlibrle7b">
   <meta property="og:description" content="Embedded 7-bit RLE Compression Library">
   <meta property="og:image" content="https://raw.githubusercontent.com/vigatron/vhlibrle7b/main/docs/vhlibrle7b_logo_1200x630_transparent.png">
+
+  <!-- Обязательные теги для X (Twitter) -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="vhlibrle7b">
+  <meta name="twitter:description" content="Embedded 7-bit RLE Compression Library">
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/vigatron/vhlibrle7b/main/docs/vhlibrle7b_logo_1200x630_transparent.png">
+
 </head>
 
 # vhlibrle7b — Embedded 7-bit RLE Compression Library

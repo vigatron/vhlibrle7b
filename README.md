@@ -1,7 +1,6 @@
 ---
 title: "vhlibrle7b"
 description: "Embedded 7-bit RLE Compression Library"
-image: "/docs/vhlibrle7b_logo_1000x1000_transparent.png"
 ---
 
 # vhlibrle7b — Embedded 7-bit RLE Compression Library
@@ -13,6 +12,8 @@ image: "/docs/vhlibrle7b_logo_1000x1000_transparent.png"
 **vhlibrle7b** is a lightweight, header-only C++ library implementing a 7-bit Run-Length Encoding (RLE) algorithm tailored for resource-constrained embedded systems and microcontrollers (e.g., ARM Cortex-M, ESP32, STM32).
 
 It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking, and forced 32-bit memory alignment validation (`checkalign`) to prevent hardware fault exceptions on alignment-sensitive architectures.
+
+##### image: "/docs/vhlibrle7b_logo_1000x1000_transparent.png"
 
 
 ---

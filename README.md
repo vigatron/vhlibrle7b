@@ -1,8 +1,9 @@
----
-title: "vhlibrle7b"
-description: "Embedded 7-bit RLE Compression Library"
-image: "/docs/vhlibrle7b_logo_1000x1000_transparent.png"
----
+<head>
+  <meta name="description" content="Lightweight header-only C++11 library for 7-bit RLE compression on ARM Cortex-M, ESP32, and STM32.">
+  <meta property="og:title" content="vhlibrle7b">
+  <meta property="og:description" content="Embedded 7-bit RLE Compression Library">
+  <meta property="og:image" content="https://raw.githubusercontent.com/vigatron/vhlibrle7b/rev0p0p4fix2/docs/vhlibrle7b_logo_1200x630_transparent.png">
+</head>
 
 # vhlibrle7b — Embedded 7-bit RLE Compression Library
 

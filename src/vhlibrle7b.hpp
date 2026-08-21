@@ -257,7 +257,7 @@ class VHRLE7b {
             // Check CRC
             uint32_t crcrle = crc32(ptrrle + sizeof(sthdr), hdr.rlesize);
             bool checkcrc = crcrle == hdr.crc32rle;
-            return checkcrc ? vok : errCRC;
+            return checkcrc ? static_cast<verr>(vok) : static_cast<verr>(errCRC);
         }
 
         /**
@@ -360,7 +360,7 @@ class VHRLE7b {
             bool valid = crc == hdr.crc32src;
 
             // Return CRC verification result
-            return valid ? vok : errCRC;
+            return valid ? static_cast<verr>(vok) : static_cast<verr>(errCRC);
         }
 
         private:

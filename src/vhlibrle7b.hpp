@@ -25,388 +25,579 @@
 #endif
 
 #ifndef VHPLATFORM_INCLUDED
-#define verr        uint32_t
-#define verror(X)   (X)
-#define vok         verror(0)
+#define verr uint32_t
+#define verror(X) (X)
+#define vok verror(0)
 #endif
+
+// * Callback-oriented API introduced in rev 0.0.5 for minimizing RAM usage
+
+// Callback function template for input data
+typedef bool (*CallbackFunc_VHLIBRLE7B_IDATA)(uint8_t *pbv, size_t pos);
+
+// Callback function template for output data
+typedef bool (*CallbackFunc_VHLIBRLE7B_ODATA)(uint8_t bv, size_t pos);
 
 /**
  * Embedded version RLE-7-bit
  */
 
-class VHRLE7b {
+class VHRLE7b
+{
 
-    public:
+public:
+    VHRLE7b() = default;
 
-        VHRLE7b() = default;
+#pragma pack(push, 1)
+    struct sthdr
+    {
+        uint8_t pfx[8];    // Default prefix
+        uint32_t spans;    // Spans count field
+        uint32_t crc32src; // Source data CRC32
+        uint32_t srcsize;  // Source block length
+        uint32_t crc32rle; // Destination data CRC32
+        uint32_t rlesize;  // Destination block length
+        uint32_t reserved; // Reserved
+    };
+#pragma pack(pop)
 
-        #pragma pack(push, 1)
-        struct sthdr {
-            uint8_t     pfx[8];     // Default prefix
-            uint32_t    spans;      // Spans count field
-            uint32_t    crc32src;   // Source data CRC32
-            uint32_t    srcsize;    // Source block length
-            uint32_t    crc32rle;   // Destination data CRC32
-            uint32_t    rlesize;    // Destination block length
-            uint32_t    reserved;   // Reserved
+    static_assert(sizeof(sthdr) == 32);
+
+    enum Status : uint32_t
+    {
+        okstat = 0,
+        errSrcMemorySize,
+        errSrcInvalid,
+        errRleSourceInvalid,
+        errSrcVersion,
+        errDestMemorySize,
+        errSettings,
+        errAlign,
+        errWrite,
+        errCRC,
+        errOutOfRange,
+        errInternal,
+
+        errNotImplemented,
+        errInvalidCallback,
+        errInvalidHeader,
+        errInvalidRLESource,
+        errCheckFailed
+    };
+
+    /**
+     * @brief Compresses data using the VHRLE7b run-length encoding algorithm.
+     *
+     * Packs raw source bytes into 7-bit RLE and Literal (STD) spans, prepending a 32-byte
+     * header containing stream metadata and CRC32 checksums.
+     *
+     * @param[in]  srcptr   Pointer to the raw input data buffer (must be 32-bit aligned).
+     * @param[in]  srcsize  Size of the raw input data in bytes.
+     * @param[out] dstptr   Pointer to the output destination buffer (must be 32-bit aligned).
+     * @param[in]  dstsize  Total capacity of the destination buffer in bytes.
+     * @param[in]  minRLE   Minimum repeating sequence length to trigger RLE encoding (must be >= 4).
+     * @param[in]  maxSIZ   Maximum allowed span size in bytes (must be in range [4, 127]).
+     *
+     * @return Status::vok on success, or an appropriate Status error code on failure:
+     *         - errDestMemorySize : Destination buffer is too small to fit the header.
+     *         - errSettings       : Invalid parameter constraints (minRLE < 4, or maxSIZ outside [4, 127]).
+     *         - errAlign          : Source or destination pointer is not 4-byte aligned.
+     *         - errWrite          : Compressed data exceeded destination buffer bounds.
+     */
+    verr pack(
+        const uint8_t *srcptr,
+        const uint32_t srcsize,
+        uint8_t *dstptr,
+        const uint32_t dstsize,
+        const uint8_t minRLE,
+        const uint8_t maxSIZ)
+    {
+
+        // Check before processing
+        if (dstsize < sizeof(sthdr))
+            return errDestMemorySize;
+        if (minRLE < 4)
+            return errSettings;
+        if (maxSIZ < 4 || maxSIZ >= 128)
+            return errSettings;
+        if (!checkalign(srcptr))
+            return errAlign;
+        if (!checkalign(dstptr))
+            return errAlign;
+
+        // Setup writer
+        uint8_t *ptrbin = dstptr + sizeof(sthdr);
+        uint32_t wrleft = dstsize - sizeof(sthdr);
+        uint32_t spans_count = 0;
+        uint32_t stdcnt = 0;
+
+        // Safe byte writer lambda
+        auto putbyte = [&](uint8_t v) -> bool
+        {
+            if (wrleft == 0)
+                return false;
+            wrleft--;
+            *ptrbin++ = v;
+            return true;
         };
-        #pragma pack(pop)
 
-        static_assert(sizeof(sthdr) == 32);
-
-        enum Status : uint32_t {
-            okstat = 0,
-            errSrcMemorySize,
-            errSrcInvalid,
-            errRleSourceInvalid,
-            errSrcVersion,
-            errDestMemorySize,
-            errSettings,
-            errAlign,
-            errWrite,
-            errCRC,
-            errOutOfRange,
-            errInternal
+        // RLE span writer lambda
+        auto writerle = [&](size_t pos, uint8_t cnt, uint8_t sym) -> bool
+        {
+#if defined(DEBUG_VHRLE7B)
+            printf("Write RLE @ %d  `%d`x%d\n", (int)pos, sym, (int)cnt);
+#endif
+            if (!putbyte(0x80 | cnt))
+                return false;
+            if (!putbyte(sym))
+                return false;
+            spans_count++;
+            return true;
         };
 
-        /**
-         * @brief Compresses data using the VHRLE7b run-length encoding algorithm.
-         * 
-         * Packs raw source bytes into 7-bit RLE and Literal (STD) spans, prepending a 32-byte
-         * header containing stream metadata and CRC32 checksums.
-         * 
-         * @param[in]  srcptr   Pointer to the raw input data buffer (must be 32-bit aligned).
-         * @param[in]  srcsize  Size of the raw input data in bytes.
-         * @param[out] dstptr   Pointer to the output destination buffer (must be 32-bit aligned).
-         * @param[in]  dstsize  Total capacity of the destination buffer in bytes.
-         * @param[in]  minRLE   Minimum repeating sequence length to trigger RLE encoding (must be >= 4).
-         * @param[in]  maxSIZ   Maximum allowed span size in bytes (must be in range [4, 127]).
-         * 
-         * @return Status::vok on success, or an appropriate Status error code on failure:
-         *         - errDestMemorySize : Destination buffer is too small to fit the header.
-         *         - errSettings       : Invalid parameter constraints (minRLE < 4, or maxSIZ outside [4, 127]).
-         *         - errAlign          : Source or destination pointer is not 4-byte aligned.
-         *         - errWrite          : Compressed data exceeded destination buffer bounds.
-         */
-        verr pack(
-            const uint8_t *srcptr,
-            const uint32_t srcsize,
-            uint8_t *dstptr,
-            const uint32_t dstsize,
-            const uint8_t minRLE,
-            const uint8_t maxSIZ
-        ) {
+        // Literal (STD) span writer lambda
+        auto writestd = [&](size_t pos, uint8_t cnt, const uint8_t *pbin) -> bool
+        {
+#if defined(DEBUG_VHRLE7B)
+            printf("Write STD @ %d x%d :", (int)pos, (int)cnt);
+#endif
+            if (!putbyte(cnt))
+                return false;
+            for (uint8_t i = 0; i < cnt; i++)
+            {
+#if defined(DEBUG_VHRLE7B)
+                printf(" %d", pbin[i]);
+#endif
+                if (!putbyte(pbin[i]))
+                    return false;
+            }
+            spans_count++;
+#if defined(DEBUG_VHRLE7B)
+            printf("\n");
+#endif
+            return true;
+        };
 
-            // Check before processing
-            if(dstsize < sizeof(sthdr)) return errDestMemorySize;
-            if(minRLE < 4) return errSettings;
-            if(maxSIZ < 4 || maxSIZ >= 128) return errSettings;
-            if(!checkalign(srcptr)) return errAlign;
-            if(!checkalign(dstptr)) return errAlign;
+        // Main processing loop
+        for (uint32_t i = 0; i < srcsize;)
+        {
 
-            // Setup writer
-            uint8_t * ptrbin = dstptr    + sizeof(sthdr);
-            uint32_t  wrleft = dstsize   - sizeof(sthdr);
-            uint32_t  spans_count = 0;
-            uint32_t  stdcnt = 0;
+            uint32_t scnt = calcscnt(srcptr + i, srcsize - i);
 
-            // Safe byte writer lambda
-            auto putbyte = [&](uint8_t v) -> bool {
-                if (wrleft == 0) return false;
-                wrleft--;
-                *ptrbin++ = v;
-                return true;
-            };
+            if (scnt >= minRLE)
+            {
 
-            // RLE span writer lambda
-            auto writerle = [&](size_t pos, uint8_t cnt, uint8_t sym) -> bool {
-                #if defined(DEBUG_VHRLE7B)
-                printf("Write RLE @ %d  `%d`x%d\n", (int)pos, sym, (int)cnt);
-                #endif
-                if (!putbyte(0x80 | cnt)) return false;
-                if (!putbyte(sym)) return false;
-                spans_count++;
-                return true;
-            };
-
-            // Literal (STD) span writer lambda
-            auto writestd = [&](size_t pos, uint8_t cnt, const uint8_t *pbin) -> bool {
-                #if defined(DEBUG_VHRLE7B)
-                printf("Write STD @ %d x%d :", (int)pos, (int)cnt);
-                #endif
-                if (!putbyte(cnt)) return false;
-                for (uint8_t i = 0; i < cnt; i++) {
-                    #if defined(DEBUG_VHRLE7B)
-                    printf(" %d", pbin[i]);
-                    #endif
-                    if (!putbyte(pbin[i])) return false;
+                // Force store STD spans if avail
+                while (stdcnt)
+                {
+                    size_t wrcnt = (stdcnt > maxSIZ) ? maxSIZ : stdcnt;
+                    if (!writestd(i - stdcnt, wrcnt, srcptr + (i - stdcnt)))
+                        return errWrite;
+                    stdcnt -= wrcnt;
                 }
-                spans_count++;
-                #if defined(DEBUG_VHRLE7B)
-                printf("\n");
-                #endif
-                return true;
-            };
 
-            // Main processing loop
-            for(uint32_t i = 0; i < srcsize;) {
+                // Store RLE spans
+                while (scnt)
+                {
+                    size_t wrcnt = (scnt > maxSIZ) ? maxSIZ : scnt;
+                    if (!writerle(i, wrcnt, srcptr[i]))
+                        return errWrite;
+                    scnt -= wrcnt;
+                    i += wrcnt;
+                }
+            }
+            else
+            {
 
-                uint32_t scnt = calcscnt(srcptr + i, srcsize - i);
+                stdcnt += scnt;
+                i += scnt;
 
-                if(scnt >= minRLE) {
+                // Store STD
+                while (stdcnt >= maxSIZ)
+                {
+                    if (!writestd(i - stdcnt, maxSIZ, srcptr + (i - stdcnt)))
+                        return errWrite;
+                    stdcnt -= maxSIZ;
+                }
+
+                // EOF ? (i++ already)
+                if (i == srcsize)
+                {
 
                     // Force store STD spans if avail
-                    while(stdcnt) {
+                    while (stdcnt)
+                    {
                         size_t wrcnt = (stdcnt > maxSIZ) ? maxSIZ : stdcnt;
-                        if(!writestd(i - stdcnt, wrcnt, srcptr + (i - stdcnt)))
+                        if (!writestd(i - stdcnt, wrcnt, srcptr + (i - stdcnt)))
                             return errWrite;
                         stdcnt -= wrcnt;
                     }
-
-                    // Store RLE spans
-                    while(scnt) {
-                        size_t wrcnt = (scnt > maxSIZ) ? maxSIZ : scnt;
-                        if(!writerle(i, wrcnt, srcptr[i]))
-                            return errWrite;
-                        scnt -= wrcnt;
-                        i += wrcnt;
-                    }
-
-                } else {
-
-                    stdcnt += scnt;
-                    i += scnt;
-
-                    // Store STD
-                    while(stdcnt >= maxSIZ) {
-                        if(!writestd(i - stdcnt, maxSIZ, srcptr + (i - stdcnt)))
-                            return errWrite;
-                        stdcnt -= maxSIZ;
-                    }
-
-                    // EOF ? (i++ already)
-                    if(i == srcsize) {
-
-                        // Force store STD spans if avail
-                        while(stdcnt) {
-                            size_t wrcnt = (stdcnt > maxSIZ) ? maxSIZ : stdcnt;
-                            if(!writestd(i - stdcnt, wrcnt, srcptr + (i - stdcnt)))
-                                return errWrite;
-                            stdcnt -= wrcnt;
-                        }
-
-                    }
-
                 }
-
             }
-
-            // Compute payload size
-            uint32_t compressed_data_size = (dstsize - sizeof(sthdr)) - wrleft;
-
-            // Copy header to destination buffer start
-            sthdr hdr;
-            std::memcpy(hdr.pfx, get_hdrpfx(), sizeof(hdr.pfx));
-            hdr.spans = spans_count;
-            hdr.srcsize = srcsize;
-            hdr.crc32src = crc32(srcptr, srcsize);
-            hdr.rlesize = compressed_data_size;
-            hdr.crc32rle = crc32(dstptr + sizeof(sthdr), compressed_data_size);
-            hdr.reserved = 0;
-
-            // Copy header to destination buffer start
-            std::memcpy(dstptr, &hdr, sizeof(sthdr));
-
-            // Return result
-            return vok;
         }
 
-        /**
-         * @brief Validates a compressed VHRLE7b data block structure and integrity.
-         * @param ptrrle Pointer to the input compressed block (including header).
-         * @param rleblksize Total size of the compressed block in bytes.
-         * @return Status::vok if valid, error code otherwise
-         *          (errAlign, errSrcMemorySize, errSrcVersion, errSrcInvalid, errCRC).
-         */
-        verr check(
-            const uint8_t * ptrrle,
-            const uint32_t rleblksize) {
+        // Compute payload size
+        uint32_t compressed_data_size = (dstsize - sizeof(sthdr)) - wrleft;
 
-            if(!checkalign(ptrrle))
-                return errAlign;
+        // Copy header to destination buffer start
+        sthdr hdr;
+        std::memcpy(hdr.pfx, get_hdrpfx(), sizeof(hdr.pfx));
+        hdr.spans = spans_count;
+        hdr.srcsize = srcsize;
+        hdr.crc32src = calcBlockCRC32(srcptr, srcsize);
+        hdr.rlesize = compressed_data_size;
+        hdr.crc32rle = calcBlockCRC32(dstptr + sizeof(sthdr), compressed_data_size);
+        hdr.reserved = 0;
 
-            // Check limit
-            if(rleblksize < sizeof(sthdr))
-                return errSrcMemorySize;
+        // Copy header to destination buffer start
+        std::memcpy(dstptr, &hdr, sizeof(sthdr));
 
-            sthdr hdr;
-            std::memcpy(&hdr, ptrrle, sizeof(sthdr));
+        // Return result
+        return vok;
+    }
 
-            if (hdr.reserved != 0)
-                return errSrcVersion;
+    /**
+     * @brief Validates a compressed VHRLE7b data block structure and integrity.
+     * @param ptrrle Pointer to the input compressed block (including header).
+     * @param rleblksize Total size of the compressed block in bytes.
+     * @return Status::vok if valid, error code otherwise
+     *          (errAlign, errSrcMemorySize, errSrcVersion, errSrcInvalid, errCRC).
+     */
+    verr check(
+        const uint8_t *ptrrle,
+        const uint32_t rleblksize)
+    {
 
-            // Check pfx
-            for(size_t i = 0; i < sizeof(sthdr::pfx); i++)
-                if(hdr.pfx[i] != get_hdrpfx()[i])
-                    return errSrcInvalid;
+        if (!checkalign(ptrrle))
+            return errAlign;
 
-            // Check rlesrc size
-            if(rleblksize - sizeof(sthdr) != hdr.rlesize)
-                return errSrcMemorySize;
+        // Check limit
+        if (rleblksize < sizeof(sthdr))
+            return errSrcMemorySize;
 
-            // Check CRC
-            uint32_t crcrle = crc32(ptrrle + sizeof(sthdr), hdr.rlesize);
-            bool checkcrc = crcrle == hdr.crc32rle;
-            return checkcrc ? vok : errCRC;
-        }
+        sthdr hdr;
+        std::memcpy(&hdr, ptrrle, sizeof(sthdr));
 
-        /**
-         * @brief Decompresses a VHRLE7b encoded data block and validates CRC32 checksums.
-         * @param ptrsrc Pointer to the source compressed data block.
-         * @param srcsize Size of the source compressed data block in bytes.
-         * @param ptrdst Pointer to the destination output buffer.
-         * @param dstsize Maximum capacity of the destination buffer in bytes.
-         * @return Status::vok on success, or appropriate Status error code on failure.
-         */
-        verr unpack(
-            const uint8_t * ptrsrc,
-            const uint32_t  srcsize,
-            uint8_t * ptrdst,
-            const uint32_t  dstsize
-        ) {
+        if (!checkHeader(&hdr))
+            return verror(errInvalidHeader);
 
-            if(check(ptrsrc, srcsize) != vok)
-                return errRleSourceInvalid;
+        // Check rlesrc size
+        if (rleblksize - sizeof(sthdr) != hdr.rlesize)
+            return errSrcMemorySize;
 
-            if(!checkalign(ptrdst))
-                return errAlign;
+        // Check CRC
+        uint32_t crcrle = calcBlockCRC32(ptrrle + sizeof(sthdr), hdr.rlesize);
+        bool checkcrc = crcrle == hdr.crc32rle;
+        return checkcrc ? vok : errCRC;
+    }
 
-            uint8_t* ptrbin = ptrdst;
-            uint32_t wrleft = dstsize;
+    /**
+     * @brief Decompresses a VHRLE7b encoded data block and validates CRC32 checksums.
+     * @param ptrsrc Pointer to the source compressed data block.
+     * @param srcsize Size of the source compressed data block in bytes.
+     * @param ptrdst Pointer to the destination output buffer.
+     * @param dstsize Maximum capacity of the destination buffer in bytes.
+     * @return Status::vok on success, or appropriate Status error code on failure.
+     */
+    verr unpack(
+        const uint8_t *ptrsrc,
+        const uint32_t srcsize,
+        uint8_t *ptrdst,
+        const uint32_t dstsize)
+    {
 
-            // Safe byte writer lambda
-            auto putbyte = [&](uint8_t v) -> bool {
-                if (wrleft == 0) return false;
-                wrleft--;
-                *ptrbin++ = v;
-                return true;
-            };
+        if (check(ptrsrc, srcsize) != vok)
+            return errRleSourceInvalid;
 
-            sthdr hdr;
-            std::memcpy(&hdr, ptrsrc, sizeof(sthdr));
+        if (!checkalign(ptrdst))
+            return errAlign;
 
-            // Not enough output buffer space for decompressed data
-            if (dstsize < hdr.srcsize)
-                return errDestMemorySize;
+        uint8_t *ptrbin = ptrdst;
+        uint32_t wrleft = dstsize;
 
-            uint32_t spanscnt = hdr.spans;
-            uint32_t offs = sizeof(sthdr);
+        // Safe byte writer lambda
+        auto putbyte = [&](uint8_t v) -> bool
+        {
+            if (wrleft == 0)
+                return false;
+            wrleft--;
+            *ptrbin++ = v;
+            return true;
+        };
 
-            while(spanscnt--) {
+        sthdr hdr;
+        std::memcpy(&hdr, ptrsrc, sizeof(sthdr));
 
-                // Validate stream boundaries
-                if(offs >= srcsize)
+        // Not enough output buffer space for decompressed data
+        if (dstsize < hdr.srcsize)
+            return errDestMemorySize;
+
+        uint32_t spanscnt = hdr.spans;
+        uint32_t offs = sizeof(sthdr);
+
+        while (spanscnt--)
+        {
+
+            // Validate stream boundaries
+            if (offs >= srcsize)
+                return errOutOfRange;
+
+            uint8_t ctrl = ptrsrc[offs++];
+            uint8_t mod = ctrl >> 7;
+            uint8_t cnt = ctrl & 0x7F;
+
+            if (cnt == 0)
+                return errInternal;
+
+            if (mod)
+            { // RLE
+
+                if (offs >= srcsize)
                     return errOutOfRange;
 
-                uint8_t ctrl = ptrsrc[offs++];
-                uint8_t mod = ctrl >> 7;
-                uint8_t cnt = ctrl & 0x7F;
+                uint8_t sym = ptrsrc[offs++];
 
-                if (cnt == 0)
-                    return errInternal;
+#if defined(DEBUG_VHRLE7B)
+                printf("RLE %d\n", cnt);
+#endif
 
-                if(mod) { // RLE
-
-                    if (offs >= srcsize)
-                        return errOutOfRange;
-
-                     uint8_t sym = ptrsrc[offs++];
-
-                    #if defined(DEBUG_VHRLE7B)
-                    printf("RLE %d\n", cnt);
-                    #endif
-
-                    for(uint8_t i=0; i < cnt; i++)
-                        if(!putbyte(sym))
-                            return errDestMemorySize;
-
-                } else { // STD
-
-                    if (srcsize - offs < cnt)
-                        return errOutOfRange;
-
-                    #if defined(DEBUG_VHRLE7B)
-                    printf("STD %d\n", cnt);
-                    #endif
-
-                    for(uint8_t i=0; i < cnt; i++)
-                        if(!putbyte(ptrsrc[offs++]))
-                            return errDestMemorySize;
-                }
-
+                for (uint8_t i = 0; i < cnt; i++)
+                    if (!putbyte(sym))
+                        return errDestMemorySize;
             }
+            else
+            { // STD
 
-            // Verify total consumed bytes match source size
-            if(offs != srcsize)
-                return errInternal;
+                if (srcsize - offs < cnt)
+                    return errOutOfRange;
 
-            // Verify uncompressed byte count matches header
-            uint32_t produced = dstsize - wrleft;
-            if (produced != hdr.srcsize)
-                return errInternal;
+#if defined(DEBUG_VHRLE7B)
+                printf("STD %d\n", cnt);
+#endif
 
-            // Check CRC32
-            uint32_t crc = crc32(ptrdst, hdr.srcsize);
-            bool valid = crc == hdr.crc32src;
-
-            // Return CRC verification result
-            return valid ? vok : errCRC;
+                for (uint8_t i = 0; i < cnt; i++)
+                    if (!putbyte(ptrsrc[offs++]))
+                        return errDestMemorySize;
+            }
         }
 
-        private:
+        // Verify total consumed bytes match source size
+        if (offs != srcsize)
+            return errInternal;
 
-            /**
-             *
-             */
-            static const uint8_t* get_hdrpfx() {
-                    static const uint8_t pfx[8] = {
-                        'V', 'H', 'R', 'L', 'E', '7', 'b', ' '
-                    };
-                    return pfx;
-                }
+        // Verify uncompressed byte count matches header
+        uint32_t produced = dstsize - wrleft;
+        if (produced != hdr.srcsize)
+            return errInternal;
 
-            /**
-             *
-             */
-            size_t calcscnt(const uint8_t *ptr, size_t sz) {
-                if(sz < 2) return sz;
-                size_t cnt = 1;
-                uint8_t sym = *ptr;
-                for(size_t i = 1; i <sz; i++) {
-                    if(ptr[i] == sym) cnt++;
-                    else break; }
-                return cnt;
-            }
+        // Check CRC32
+        uint32_t crc = calcBlockCRC32(ptrdst, hdr.srcsize);
+        bool valid = crc == hdr.crc32src;
 
-            /**
-             *
-             */
-            uint32_t crc32(const uint8_t *data, size_t len, uint32_t crc = 0xFFFFFFFF) {
-                while (len--) {
-                    crc ^= *data++;
-                    for (int i = 0; i < 8; i++)
-                        crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
-                }
-                return ~crc;
-            }
+        // Return CRC verification result
+        return valid ? vok : errCRC;
+    }
 
-            /**
-             *
-             */
-            bool checkalign(const uint8_t *ptr) {
-                return ! (reinterpret_cast<uintptr_t>(ptr) % sizeof(uint32_t));
-            }
+    /**
+     * @brief
+     * @param
+     * @param
+     * @return
+     */
+    verr packWithAPICallback(
+        CallbackFunc_VHLIBRLE7B_IDATA funcIn,
+        CallbackFunc_VHLIBRLE7B_ODATA funcOut)
+    {
+        return verror(errNotImplemented);
+    }
 
+    /**
+     * @brief
+     * @param
+     * @param
+     * @return
+     */
+    verr checkRLESourceWithAPICallback(
+        CallbackFunc_VHLIBRLE7B_IDATA funcIn,
+        CallbackFunc_VHLIBRLE7B_ODATA funcOut)
+    {
+        //
+        sthdr hdr;
+
+        if (!readHeaderWithAPI(funcIn, funcOut, &hdr))
+            return verror(errRleSourceInvalid);
+
+        if (!checkHeader(&hdr))
+            return verror(errInvalidHeader);
+
+        uint32_t crc_rle;
+        if(!calcBlockCRC32WithAPI(funcIn, 0, &crc_rle, sizeof(sthdr)))
+            return verror(errRleSourceInvalid);
+
+        if(crc_rle != hdr.crc32rle)
+            return verror(errInvalidRLESource);
+
+        return verror(errNotImplemented);
+    }
+
+    /**
+     * @brief
+     * @param
+     * @param
+     * @return
+     */
+    verr unpackWithAPICallback(
+        CallbackFunc_VHLIBRLE7B_IDATA funcIn,
+        CallbackFunc_VHLIBRLE7B_ODATA funcOut,
+        bool checkbefore = true)
+    {
+        if(!checkRLESourceWithAPICallback(funcIn, funcOut))
+            return verr(errCheckFailed);
+
+        //
+        sthdr hdr;
+
+        if (!readHeaderWithAPI(funcIn, funcOut, &hdr))
+            return verror(errRleSourceInvalid);
+
+        if (!checkHeader(&hdr))
+            return verror(errInvalidHeader);
+
+        return verror(errNotImplemented);
+    }
+
+private:
+    /**
+     *
+     */
+    static const uint8_t *get_hdrpfx()
+    {
+        static const uint8_t pfx[8] = {
+            'V', 'H', 'R', 'L', 'E', '7', 'b', ' '};
+        return pfx;
+    }
+
+    /**
+     *
+     */
+    size_t calcscnt(const uint8_t *ptr, size_t sz)
+    {
+        if (sz < 2)
+            return sz;
+        size_t cnt = 1;
+        uint8_t sym = *ptr;
+        for (size_t i = 1; i < sz; i++)
+        {
+            if (ptr[i] == sym)
+                cnt++;
+            else
+                break;
+        }
+        return cnt;
+    }
+
+    /**
+     *
+     */
+    uint32_t calcBlockCRC32(
+        const uint8_t *data,
+        size_t len,
+        uint32_t crc = 0xFFFFFFFF)
+    {
+        while (len--)
+        {
+            crc ^= *data++;
+            for (int i = 0; i < 8; i++)
+                crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+        }
+        return ~crc;
+    }
+
+    /**
+     *
+     */
+    bool calcBlockCRC32WithAPI(
+        CallbackFunc_VHLIBRLE7B_IDATA funcIn,
+        size_t len,
+        uint32_t *pdst,
+        size_t rdoffset,
+        uint32_t crc = 0xFFFFFFFF)
+    {
+        for( size_t i=0; i<len; i++)
+        {
+            uint8_t data;
+            if(!funcIn(&data, rdoffset++))
+                return false;
+
+            crc ^= data;
+            for (int i = 0; i < 8; i++)
+                crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+        }
+        
+        *pdst = ~crc;
+        return true;
+    }
+
+
+    /**
+     *
+     */
+    bool checkalign(const uint8_t *ptr)
+    {
+        return !(reinterpret_cast<uintptr_t>(ptr) % sizeof(uint32_t));
+    }
+
+    /**
+     *
+     */
+    bool checkHeader(sthdr *phdr)
+    {
+
+        if (phdr->reserved != 0)
+            return errSrcVersion;
+
+        // Check pfx
+        for (size_t i = 0; i < sizeof(sthdr::pfx); i++)
+            if (phdr->pfx[i] != get_hdrpfx()[i])
+                return errSrcInvalid;
+
+        return true;
+    }
+
+    /**
+     *
+     */
+    bool checkCallbacks(
+        CallbackFunc_VHLIBRLE7B_IDATA *funcIn,
+        CallbackFunc_VHLIBRLE7B_ODATA *funcOut)
+    {
+        if (funcIn == nullptr)
+            return false;
+        if (funcOut == nullptr)
+            return false;
+        return true;
+    }
+
+    /**
+     *
+     */
+    bool readHeaderWithAPI(
+        CallbackFunc_VHLIBRLE7B_IDATA funcIn,
+        CallbackFunc_VHLIBRLE7B_ODATA funcOut,
+        sthdr *hdr)
+    {
+
+        uint8_t *pout = (uint8_t *)hdr;
+
+        for (size_t i = 0; i < sizeof(sthdr); i++)
+        {
+            bool rd = funcIn(pout + i, i);
+            if (!rd)
+                return false;
+        }
+
+        return true;
+    }
 };
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b

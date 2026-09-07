@@ -63,6 +63,17 @@ public:
 
     static_assert(sizeof(sthdr) == 32);
 
+    struct stblockmode
+    {
+        uint8_t *src;
+        size_t srcpos;
+        size_t srcmax;
+
+        uint8_t *dst;
+        size_t dstpos;
+        size_t dstmax;
+    };
+
     enum Status : uint32_t
     {
         okstat = 0,
@@ -83,6 +94,12 @@ public:
         errInvalidHeader,
         errInvalidRLESource,
         errCheckFailed
+    };
+
+    enum ChunkType : uint8_t
+    {
+        chunkSTD = 0,
+        chunkRLE
     };
 
     /**
@@ -263,9 +280,13 @@ public:
      * @return Status::vok if valid, error code otherwise
      *          (errAlign, errSrcMemorySize, errSrcVersion, errSrcInvalid, errCRC).
      */
-    verr check(
+    verr checkRLE(
         const uint8_t *ptrrle,
-        const uint32_t rleblksize)
+        const uint32_t rleblksize,
+
+        // Single-byte APIs: both should be valid for sbyte mode
+        CallbackFunc_VHLIBRLE7B_IDATA getbyte = nullptr,
+        CallbackFunc_VHLIBRLE7B_ODATA putbyte = nullptr)
     {
 
         if (!checkalign(ptrrle))
@@ -278,7 +299,7 @@ public:
         sthdr hdr;
         std::memcpy(&hdr, ptrrle, sizeof(sthdr));
 
-        if (!checkHeader(&hdr))
+        if (!internalCheckHeaderStruct(&hdr))
             return verror(errInvalidHeader);
 
         // Check rlesrc size
@@ -300,102 +321,32 @@ public:
      * @return Status::vok on success, or appropriate Status error code on failure.
      */
     verr unpack(
-        const uint8_t *ptrsrc,
+
+        // Block mode API
+        const uint8_t *pRLEbin,
         const uint32_t srcsize,
-        uint8_t *ptrdst,
-        const uint32_t dstsize)
+        const uint8_t *pBINout,
+        const uint32_t dstsize,
+
+        // Single-byte APIs: both should be valid for sbyte mode
+        CallbackFunc_VHLIBRLE7B_IDATA getbyte = nullptr,
+        CallbackFunc_VHLIBRLE7B_ODATA putbyte = nullptr)
     {
+        // Mode: block mode or single-byte ?
+        bool modeAPIblock = getbyte == nullptr || putbyte == nullptr;
 
-        if (check(ptrsrc, srcsize) != vok)
-            return errRleSourceInvalid;
+        verr status;
 
-        if (!checkalign(ptrdst))
-            return errAlign;
-
-        uint8_t *ptrbin = ptrdst;
-        uint32_t wrleft = dstsize;
-
-        // Safe byte writer lambda
-        auto putbyte = [&](uint8_t v) -> bool
+        if (modeAPIblock)
         {
-            if (wrleft == 0)
-                return false;
-            wrleft--;
-            *ptrbin++ = v;
-            return true;
-        };
-
-        sthdr hdr;
-        std::memcpy(&hdr, ptrsrc, sizeof(sthdr));
-
-        // Not enough output buffer space for decompressed data
-        if (dstsize < hdr.srcsize)
-            return errDestMemorySize;
-
-        uint32_t spanscnt = hdr.spans;
-        uint32_t offs = sizeof(sthdr);
-
-        while (spanscnt--)
+            status = unpackWithAPIBlockMode(pRLEbin, srcsize, pBINout, dstsize);
+        }
+        else
         {
-
-            // Validate stream boundaries
-            if (offs >= srcsize)
-                return errOutOfRange;
-
-            uint8_t ctrl = ptrsrc[offs++];
-            uint8_t mod = ctrl >> 7;
-            uint8_t cnt = ctrl & 0x7F;
-
-            if (cnt == 0)
-                return errInternal;
-
-            if (mod)
-            { // RLE
-
-                if (offs >= srcsize)
-                    return errOutOfRange;
-
-                uint8_t sym = ptrsrc[offs++];
-
-#if defined(DEBUG_VHRLE7B)
-                printf("RLE %d\n", cnt);
-#endif
-
-                for (uint8_t i = 0; i < cnt; i++)
-                    if (!putbyte(sym))
-                        return errDestMemorySize;
-            }
-            else
-            { // STD
-
-                if (srcsize - offs < cnt)
-                    return errOutOfRange;
-
-#if defined(DEBUG_VHRLE7B)
-                printf("STD %d\n", cnt);
-#endif
-
-                for (uint8_t i = 0; i < cnt; i++)
-                    if (!putbyte(ptrsrc[offs++]))
-                        return errDestMemorySize;
-            }
+            status = unpackWithAPICallback(getbyte, putbyte);
         }
 
-        // Verify total consumed bytes match source size
-        if (offs != srcsize)
-            return errInternal;
-
-        // Verify uncompressed byte count matches header
-        uint32_t produced = dstsize - wrleft;
-        if (produced != hdr.srcsize)
-            return errInternal;
-
-        // Check CRC32
-        uint32_t crc = calcBlockCRC32(ptrdst, hdr.srcsize);
-        bool valid = crc == hdr.crc32src;
-
-        // Return CRC verification result
-        return valid ? vok : errCRC;
+        return status;
     }
 
     /**
@@ -427,17 +378,102 @@ public:
         if (!readHeaderWithAPI(funcIn, funcOut, &hdr))
             return verror(errRleSourceInvalid);
 
-        if (!checkHeader(&hdr))
+        if (!internalCheckHeaderStruct(&hdr))
             return verror(errInvalidHeader);
 
         uint32_t crc_rle;
-        if(!calcBlockCRC32WithAPI(funcIn, 0, &crc_rle, sizeof(sthdr)))
+        if (!calcBlockCRC32WithAPI(funcIn, 0, &crc_rle, sizeof(sthdr)))
             return verror(errRleSourceInvalid);
 
-        if(crc_rle != hdr.crc32rle)
+        if (crc_rle != hdr.crc32rle)
             return verror(errInvalidRLESource);
 
         return verror(errNotImplemented);
+    }
+
+    /**
+     *
+     */
+    verr unpackWithAPIBlockMode(
+        const uint8_t *pRLEbin,
+        const uint32_t srcsize,
+        const uint8_t *pDATbin,
+        const uint32_t dstsize)
+    {
+        stblockmode sblk =
+            {
+                .src = const_cast<uint8_t *>(pRLEbin),
+                .srcpos = 0,
+                .srcmax = srcsize,
+
+                .dst = const_cast<uint8_t *>(pDATbin),
+                .dstpos = 0,
+                .dstmax = dstsize};
+
+        size_t hdrlen = sizeof(sthdr);
+
+        if (checkRLE(pRLEbin, srcsize) != vok)
+            return errRleSourceInvalid;
+
+        if (!checkalign(pDATbin))
+            return errAlign;
+
+        if (srcsize < hdrlen)
+            return errRleSourceInvalid;
+
+        // Copy RLE header struct
+        sthdr hdr;
+        std::memcpy(&hdr, pRLEbin, hdrlen);
+        sblk.srcpos += hdrlen;
+
+        // Not enough output buffer space for decompressed data
+        if (dstsize < hdr.srcsize)
+            return errDestMemorySize;
+
+        uint32_t spanscnt = hdr.spans;
+
+        while (spanscnt--)
+        {
+            uint8_t cbyte;
+            if (vok != readSourceByte(&sblk, &cbyte))
+                return errRleSourceInvalid;
+
+            uint8_t cnt = cbyte & 0x7F;
+            if (cnt == 0)
+                return errInternal;
+
+            if(!spanscnt)
+                asm("nop");
+
+            ChunkType ctype = (ChunkType)(cbyte >> 7);
+
+            if (ctype == chunkRLE)
+            {
+                if (vok != unpackRLEChunk(&sblk, cnt))
+                    return verror(1);
+            }
+            else
+            {
+                if (vok != unpackSTDChunk(&sblk, cnt))
+                    return verror(1);
+            }
+        }
+
+        // Verify total consumed bytes match source size
+        if (sblk.dstpos != sblk.dstmax)
+            return errInternal;
+
+        // Verify uncompressed byte count matches header
+        // uint32_t produced = dstsize - wrleft;
+        if ( sblk.dstpos != hdr.srcsize)
+            return errInternal;
+
+        // Check results CRC32
+        uint32_t crc = calcBlockCRC32(sblk.dst, hdr.srcsize);
+        bool valid = crc == hdr.crc32src;
+
+        // Return CRC verification result
+        return valid ? vok : errCRC;
     }
 
     /**
@@ -451,7 +487,7 @@ public:
         CallbackFunc_VHLIBRLE7B_ODATA funcOut,
         bool checkbefore = true)
     {
-        if(!checkRLESourceWithAPICallback(funcIn, funcOut))
+        if (!checkRLESourceWithAPICallback(funcIn, funcOut))
             return verr(errCheckFailed);
 
         //
@@ -460,8 +496,18 @@ public:
         if (!readHeaderWithAPI(funcIn, funcOut, &hdr))
             return verror(errRleSourceInvalid);
 
-        if (!checkHeader(&hdr))
+        if (!internalCheckHeaderStruct(&hdr))
             return verror(errInvalidHeader);
+
+        for (size_t i = 0; i < sizeof(sthdr); i++)
+        {
+            uint8_t *rptr = (uint8_t *)&hdr;
+            if (!funcIn(rptr + i, i))
+                return errRleSourceInvalid;
+        }
+
+        // if (!writeByte())
+        //     return errDestMemorySize;
 
         return verror(errNotImplemented);
     }
@@ -524,9 +570,8 @@ private:
     /**
      *
      */
-    bool checkHeader(sthdr *phdr)
+    bool internalCheckHeaderStruct(sthdr *phdr)
     {
-
         if (phdr->reserved != 0)
             return errSrcVersion;
 
@@ -564,17 +609,17 @@ private:
         size_t rdoffset,
         uint32_t crc = 0xFFFFFFFF)
     {
-        for( size_t i=0; i<len; i++)
+        for (size_t i = 0; i < len; i++)
         {
             uint8_t data;
-            if(!funcIn(&data, rdoffset++))
+            if (!funcIn(&data, rdoffset++))
                 return false;
 
             crc ^= data;
             for (int i = 0; i < 8; i++)
                 crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
         }
-        
+
         *pdst = ~crc;
         return true;
     }
@@ -600,10 +645,95 @@ private:
         return true;
     }
 
-    // SByte I/O
-    
+    // *** Block I/O
 
+    /**
+     *
+     */
+    verr readSourceByte(stblockmode *pblk, uint8_t *pbyte)
+    {
+
+        // Validate stream boundaries
+        if (pblk->srcpos >= pblk->srcmax)
+            return errOutOfRange;
+
+        *pbyte = pblk->src[pblk->srcpos++];
+        return vok;
+    }
+
+    /**
+     *
+     */
+    verr unpackRLEChunk(stblockmode *pblk, uint8_t cnt)
+    {
+        showline_RLE_cnt(cnt);
+
+        uint8_t sym;
+        if (vok != readSourceByte(pblk, &sym))
+            return errRleSourceInvalid;
+
+        // Enough in writer ?
+        if ((pblk->dstpos + cnt) > pblk->dstmax)
+            return errDestMemorySize;
+
+        // Write sequence 
+        for (uint8_t i = 0; i < cnt; i++)
+        {
+            pblk->dst[pblk->dstpos++] = sym;
+        }
+
+        return vok;
+    }
+
+    /**
+     *
+     */
+    verr unpackSTDChunk(stblockmode *pblk, uint8_t cnt)
+    {
+        showline_STD_cnt(cnt);
+
+        // Enough in reader ?
+        if ((pblk->srcpos + cnt) >= pblk->srcmax)
+            return errSrcMemorySize;
+
+        // Enough in writer ?
+        if ((pblk->dstpos + cnt) >= pblk->dstmax)
+            return errDestMemorySize;
+
+        // Unpack STD chunk
+        for (uint8_t i = 0; i < cnt; i++)
+        {
+            pblk->dst[ pblk->dstpos++ ] = pblk->src[pblk->srcpos++];
+        }
+
+        return vok;
+    }
+
+    // *** SByte I/O
+
+    // *** DBG
+
+    /**
+     *
+     */
+    void showline_RLE_cnt(uint8_t cnt)
+    {
+#if defined(DEBUG_VHRLE7B)
+        printf("RLE %d\n", cnt);
+#endif
+    }
+
+    /**
+     *
+     */
+    void showline_STD_cnt(uint8_t cnt)
+    {
+#if defined(DEBUG_VHRLE7B)
+        printf("STD %d\n", cnt);
+#endif
+    }
 };
+
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp

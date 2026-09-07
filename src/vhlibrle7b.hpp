@@ -516,32 +516,6 @@ private:
     /**
      *
      */
-    bool calcBlockCRC32WithAPI(
-        CallbackFunc_VHLIBRLE7B_IDATA funcIn,
-        size_t len,
-        uint32_t *pdst,
-        size_t rdoffset,
-        uint32_t crc = 0xFFFFFFFF)
-    {
-        for( size_t i=0; i<len; i++)
-        {
-            uint8_t data;
-            if(!funcIn(&data, rdoffset++))
-                return false;
-
-            crc ^= data;
-            for (int i = 0; i < 8; i++)
-                crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
-        }
-        
-        *pdst = ~crc;
-        return true;
-    }
-
-
-    /**
-     *
-     */
     bool checkalign(const uint8_t *ptr)
     {
         return !(reinterpret_cast<uintptr_t>(ptr) % sizeof(uint32_t));
@@ -564,6 +538,8 @@ private:
         return true;
     }
 
+    // *** API for Byte-Reading streams / 0.0.5 ***
+
     /**
      *
      */
@@ -575,6 +551,31 @@ private:
             return false;
         if (funcOut == nullptr)
             return false;
+        return true;
+    }
+
+    /**
+     *
+     */
+    bool calcBlockCRC32WithAPI(
+        CallbackFunc_VHLIBRLE7B_IDATA funcIn,
+        size_t len,
+        uint32_t *pdst,
+        size_t rdoffset,
+        uint32_t crc = 0xFFFFFFFF)
+    {
+        for( size_t i=0; i<len; i++)
+        {
+            uint8_t data;
+            if(!funcIn(&data, rdoffset++))
+                return false;
+
+            crc ^= data;
+            for (int i = 0; i < 8; i++)
+                crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
+        }
+        
+        *pdst = ~crc;
         return true;
     }
 
@@ -598,6 +599,10 @@ private:
 
         return true;
     }
+
+    // SByte I/O
+    
+
 };
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b

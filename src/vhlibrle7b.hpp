@@ -1,20 +1,29 @@
 /* ======================================================================================
  * Library       : vhlibrle7b
  * Description   : C++ library implementing a 7-bit Run-Length Encoding (RLE) algorithm
- * Revision      : 0.0.4
+ * Revision      : 0.0.5-rc1
  * Source        : https://github.com/vigatron/vhlibrle7b
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
- * Content size  : 13142
- * Date / Time   : 12-08-2026 20:36:06
- * MD5           : 39c7a25dde4d7341111f91f9200dfa75
+ * Content size  : 21956
+ * Date / Time   : 15-09-2026 18:06:32
+ * MD5           : 0b495451214e60235f1207706ac4e3e2
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
  * Copyright     : © 2026 Viktor Glebov
  * ========================[ BEGIN FILE CONTENT ]====================================== */
 #pragma once
+
+// * BMode - Memory Block operation mode
+//
+//          Operation on memory block API support since initial version
+
+// * SMode - byte-per byte I/O stream mode
+//
+//          Callback-oriented API introduced in rev 0.0.5 for minimizing RAM usage
+
 
 #include <cstddef>
 #include <cstdint>
@@ -30,11 +39,6 @@
 #define vok verror(0)
 #endif
 
-// * BMode:
-//          Operation on memory block API support since initial version
-
-// * SMode:
-//          Callback-oriented API introduced in rev 0.0.5 for minimizing RAM usage
 
 /**
  * Embedded version RLE-7-bit
@@ -99,6 +103,11 @@ public:
         errInvalidRLESource,
         errWriteError,
         errUnpackProcessFailed,
+
+        //
+        errIOSource,
+        errIODestination,
+
         errCheckFailed
     };
 
@@ -356,7 +365,7 @@ public:
     }
 
     /**
-     * @brief
+     * @brief   Pack data array using `Stream Mode`
      * @param
      * @param
      * @return
@@ -369,10 +378,11 @@ public:
     }
 
     /**
-     * @brief
-     * @param
-     * @param
-     * @return
+     * @brief Check RLE stream integrity
+     * @param funcIn Callback function for reading input data
+     * @param funcOut Callback function for writing output data
+     * @param phdr Pointer to header structure for validation
+     * @return Status::vok if valid, or appropriate error code otherwise
      */
     verr check_SMode(
         CallbackFunc_VHLIBRLE7B_IDATA funcIn,
@@ -396,7 +406,12 @@ public:
     }
 
     /**
-     *
+     * @brief Decompress RLE block / `memory block` mode
+     * @param pRLEbin Pointer to compressed RLE data block
+     * @param srcsize Size of source compressed data block in bytes
+     * @param pDATbin Pointer to destination output buffer
+     * @param dstsize Maximum capacity of destination buffer in bytes
+     * @return Status::vok on success, or appropriate error code on failure
      */
     verr unpack_BMode(
         const uint8_t *pRLEbin,
@@ -451,12 +466,12 @@ public:
             if (ctype == chunkRLE)
             {
                 if (vok != unpack_RLEChunk_BMode(&sblk, cnt))
-                    return verror(1);
+                    return verror(errIOSource);
             }
             else
             {
                 if (vok != unpack_STDChunk_BMode(&sblk, cnt))
-                    return verror(1);
+                    return verror(errIODestination);
             }
         }
 
@@ -478,10 +493,11 @@ public:
     }
 
     /**
-     * @brief
-     * @param
-     * @param
-     * @return
+     * @brief Unpack RLE data array in `Stream Mode`
+     * @param funcIn Callback function for reading input data
+     * @param funcOut Callback function for writing output data
+     * @param checkbefore Optional flag to check before unpacking (default: true)
+     * @return Status::vok on success, or appropriate error code on failure
      */
     verr unpack_SMode(
         CallbackFunc_VHLIBRLE7B_IDATA funcIn,
@@ -514,19 +530,19 @@ public:
             if (ctype == chunkRLE)
             {
                 if (vok != unpack_RLEChunk_SMode(funcIn, funcOut, &rpos, &wpos, &hdr, cnt))
-                    return verror(1);
+                    return verror(errWriteError);
             }
             else
             {
                 if (vok != unpack_STDChunk_SMode(funcIn, funcOut, &rpos, &wpos, &hdr, cnt))
-                    return verror(1);
+                    return verror(errWriteError);
             }
         }
 
-        if(rpos != (hdr.rlesize + sizeof(sthdr)))
+        if (rpos != (hdr.rlesize + sizeof(sthdr)))
             return verror(errUnpackProcessFailed);
 
-        if(wpos != hdr.srcsize)
+        if (wpos != hdr.srcsize)
             return verror(errUnpackProcessFailed);
 
         // CRC Check ?
@@ -599,13 +615,13 @@ private:
         // Check pfx
         for (size_t i = 0; i < sizeof(sthdr::pfx); i++)
             if (phdr->pfx[i] != get_hdrpfx()[i])
-                return errSrcInvalid;
+                return verror(errSrcInvalid);
 
         if (!phdr->spans)
-            return verror(1);
+            return verror(errSrcInvalid);
 
         if (!phdr->srcsize)
-            return verror(1);
+            return verror(errSrcInvalid);
 
         return vok;
     }
@@ -676,13 +692,13 @@ private:
     {
         showline_RLE_cnt(cnt);
 
-        uint8_t sym;
-        if (vok != readDataByte_BMode(pblk, &sym))
-            return errRleSourceInvalid;
-
         // Enough in writer ?
         if ((pblk->dstpos + cnt) > pblk->dstmax)
             return errDestMemorySize;
+
+        uint8_t sym;
+        if (vok != readDataByte_BMode(pblk, &sym))
+            return errRleSourceInvalid;
 
         // Write sequence
         for (uint8_t i = 0; i < cnt; i++)
@@ -701,11 +717,11 @@ private:
         showline_STD_cnt(cnt);
 
         // Enough in reader ?
-        if ((pblk->srcpos + cnt) >= pblk->srcmax)
+        if ((pblk->srcpos + cnt) > pblk->srcmax)
             return errSrcMemorySize;
 
         // Enough in writer ?
-        if ((pblk->dstpos + cnt) >= pblk->dstmax)
+        if ((pblk->dstpos + cnt) > pblk->dstmax)
             return errDestMemorySize;
 
         // Unpack STD chunk
@@ -736,7 +752,7 @@ private:
         {
             bool rd = funcIn(pout + i, i);
             if (!rd)
-                return verror(1);
+                return verror(errInvalidHeader);
         }
 
         if (internalCheckHeaderStruct(phdr) != vok)
@@ -751,21 +767,21 @@ private:
     verr unpack_RLEChunk_SMode(
         CallbackFunc_VHLIBRLE7B_IDATA funcIn,
         CallbackFunc_VHLIBRLE7B_ODATA funcOut,
-        size_t * rpos, size_t * wpos, sthdr * phdr, uint8_t cnt)
+        size_t *rpos, size_t *wpos, sthdr *phdr, uint8_t cnt)
     {
         uint8_t sym;
 
         showline_RLE_cnt(cnt);
 
-        if (!funcIn(&sym, *rpos ))
-            return errRleSourceInvalid;
+        if (!funcIn(&sym, *rpos))
+            return verror(errRleSourceInvalid);
 
         (*rpos)++;
 
-        for(uint8_t i = 0; i < cnt; i++)
+        for (uint8_t i = 0; i < cnt; i++)
         {
-            if(!funcOut(sym, *wpos, phdr))
-                return errWriteError;
+            if (!funcOut(sym, *wpos, phdr))
+                return verror(errWriteError);
             (*wpos)++;
         }
 
@@ -778,7 +794,7 @@ private:
     verr unpack_STDChunk_SMode(
         CallbackFunc_VHLIBRLE7B_IDATA funcIn,
         CallbackFunc_VHLIBRLE7B_ODATA funcOut,
-        size_t * prpos, size_t * pwpos, sthdr * phdr, uint8_t cnt)
+        size_t *prpos, size_t *pwpos, sthdr *phdr, uint8_t cnt)
     {
         uint8_t sym;
 
@@ -786,14 +802,14 @@ private:
 
         for (uint8_t i = 0; i < cnt; i++)
         {
-            if(!funcIn(&sym, *prpos))
-                return errRleSourceInvalid;
+            if (!funcIn(&sym, *prpos))
+                return verror(errRleSourceInvalid);
 
             (*prpos)++;
-                
-            if(!funcOut(sym, *pwpos, phdr))
-                return errWriteError;
-            
+
+            if (!funcOut(sym, *pwpos, phdr))
+                return verror(errWriteError);
+
             (*pwpos)++;
         }
 
@@ -828,9 +844,9 @@ private:
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp
- * Revision         : 0.0.4
- * Content size     : 13142
- * Date / Time      : 12-08-2026 20:36:06
- * MD5              : 39c7a25dde4d7341111f91f9200dfa75
+ * Revision         : 0.0.5-rc1
+ * Content size     : 21956
+ * Date / Time      : 15-09-2026 18:06:32
+ * MD5              : 0b495451214e60235f1207706ac4e3e2
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

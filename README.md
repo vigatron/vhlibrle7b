@@ -1,8 +1,8 @@
 # vhlibrle7b — Embedded 7-bit RLE Compression Library
 
-[![Revision](https://img.shields.io/badge/revision-0.0.4-blue.svg)](https://github.com/vigatron/vhlibrle7b)
+[![Revision](https://img.shields.io/badge/revision-0.0.5-blue.svg)](https://github.com/vigatron/vhlibrle7b)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/vigatron/vhlibrle7b/blob/main/LICENSE)
-[![Language](https://img.shields.io/badge/C%2B%2B-11%2B-orange.svg)]()
+[![Language](https://img.shields.io/badge/C%2B%2B-17%2B-orange.svg)](https://isocpp.org/)
 
 **vhlibrle7b** is a lightweight, header-only C++ library implementing a 7-bit Run-Length Encoding (RLE) algorithm tailored for resource-constrained embedded systems and microcontrollers (e.g., ARM Cortex-M, ESP32, STM32).
 
@@ -14,8 +14,8 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 ## Library Metadata
 
 * **Repository:** [https://github.com/vigatron/vhlibrle7b](https://github.com/vigatron/vhlibrle7b)
-* **Revision:** `0.0.4`
-* **Header Path:** `src/extmods/vhlibrle7b/src/vhlibrle7b.hpp`
+* **Revision:** `0.0.5`
+* **Header Path:** `src/vhlibrle7b.hpp`
 * **Author:** Viktor Glebov (`V01G04A81`)
 * **Copyright:** © 2026 Viktor Glebov
 * **License:** [MIT](https://opensource.org/licenses/MIT)
@@ -29,6 +29,16 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 * **Integrity Protection:** Computes dual IEEE 802.3 CRC32 checksums for both uncompressed source data and compressed payload.
 * **Hardware Safe:** Built-in address alignment checks prevent unaligned memory access crashes on RISC/ARM platforms.
 * **Configurable Parameters:** Custom thresholds for minimum sequence run-length (`minRLE`) and maximum span length (`maxSIZ`).
+* **Endianness Support** Native little-endian byte ordering.
+
+---
+
+## Operation Modes
+
+The library provides two distinct API architectures to fit different embedded constraints:
+
+* **BMode (Block Mode):** Memory Block operation. Available since the initial version. Best for in-RAM compression/decompression where both source and destination buffers are fully allocated and aligned.
+* **SMode (Stream Mode):** Byte-per-byte I/O stream. Introduced in **rev 0.0.5**, this callback-oriented API minimizes RAM footprint. Ideal for streaming data directly to/from peripherals (e.g., SPI Flash, SD Card, UART) without buffering the entire payload in RAM.
 
 ---
 
@@ -61,16 +71,18 @@ Each data span begins with a 1-byte control header (`ctrl`):
 
 ## Integration & Requirements
 
+
 ### Requirements
-* C++11 or higher
-* 32-bit aligned memory buffers for source and destination arrays
+* C++17 or higher
+* BMode: source and destination buffers must be 32-bit aligned
+* SMode: alignment is not required
 
 ### Debug Mode
 To enable verbose `printf` debugging during encoding/decoding, define `DEBUG_VHRLE7B` prior to including the header:
 
 ```cpp
 #define DEBUG_VHRLE7B
-#include "VHRLE7b.hpp"
+#include "vhlibrle7b.hpp"
 ```
 
 ### License

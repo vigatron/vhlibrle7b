@@ -1,14 +1,14 @@
 /* ======================================================================================
  * Library       : vhlibrle7b
  * Description   : C++ library implementing a 7-bit Run-Length Encoding (RLE) algorithm
- * Revision      : 0.0.5-rc3
+ * Revision      : 0.0.5-rc4
  * Source        : https://github.com/vigatron/vhlibrle7b
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
- * Content size  : 21243
- * Date / Time   : 16-09-2026 19:23:43
- * MD5           : 392e900d5bb4253dec883b71fa55f8e5
+ * Content size  : 21230
+ * Date / Time   : 17-09-2026 01:09:41
+ * MD5           : 8a9510399ba8535a1a9eaf3c2350e930
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -325,20 +325,19 @@ public:
         if (rleblksize < sizeof(sthdr))
             return errSrcMemorySize;
 
-        sthdr hdr;
-        std::memcpy(&hdr, ptrrle, sizeof(sthdr));
+        const VHRLE7b::sthdr * phdr = (VHRLE7b::sthdr *)ptrrle;
 
-        if (vok != checkHeaderIntegrity(&hdr))
+        if (isValidHeader(phdr) != vok)
             return verror(errRLEInvalidHeader);
 
         // Check rlesrc size
-        if (rleblksize - sizeof(sthdr) != hdr.rlesize)
+        if (rleblksize - sizeof(sthdr) != phdr->rlesize)
             return errSrcMemorySize;
 
         // Check CRC
-        uint32_t crcrle = calcBlockCRC32(ptrrle + sizeof(sthdr), hdr.rlesize);
-        bool checkcrc = crcrle == hdr.crc32rle;
-        return checkcrc ? vok : errCRC;
+        uint32_t crcrle = calcBlockCRC32(ptrrle + sizeof(sthdr), phdr->rlesize);
+        bool checkcrc = crcrle == phdr->crc32rle;
+        return checkcrc ? vok : verror(errCRC);
     }
 
     /**
@@ -403,7 +402,7 @@ public:
 
         const sthdr *phdr = ptrhdr(sblk.srcptr);
 
-        if(!checkHeaderIntegrity(phdr))
+        if(isValidHeader(phdr) != vok)
             return verror(errRLEInvalidHeader);
 
         // Not enough output buffer space for decompressed data
@@ -530,6 +529,31 @@ public:
         return phdr;
     }
 
+    /**
+     *
+     */
+    verr isValidHeader(const sthdr * phdr)
+    {
+        // Check pfx
+        for (size_t i = 0; i < sizeof(sthdr::pfx); i++)
+            if (phdr->pfx[i] != get_hdrpfx()[i])
+                return verror(errSrcInvalid);
+
+        // version check
+        if (phdr->reserved != 0)
+            return errSrcVersion;
+
+        // Spans non-zero ?
+        if (!phdr->spans)
+            return verror(errSrcInvalid);
+
+        // enought src bytes ?
+        if (phdr->srcsize < sizeof(sthdr))
+            return verror(errSrcInvalid);
+
+        return vok;
+    }
+
 private:
     /**
      *
@@ -604,31 +628,6 @@ private:
         // // Verify total consumed bytes match source size
         // if (sblk.dstpos != sblk.dstsiz)
         //     return errInternal;
-
-    /**
-     *
-     */
-    verr checkHeaderIntegrity(const sthdr * phdr)
-    {
-        // Check pfx
-        for (size_t i = 0; i < sizeof(sthdr::pfx); i++)
-            if (phdr->pfx[i] != get_hdrpfx()[i])
-                return verror(errSrcInvalid);
-
-        // version check
-        if (phdr->reserved != 0)
-            return errSrcVersion;
-
-        // Spans non-zero ?
-        if (!phdr->spans)
-            return verror(errSrcInvalid);
-
-        // enought src bytes ?
-        if (phdr->srcsize < sizeof(sthdr))
-            return verror(errSrcInvalid);
-
-        return vok;
-    }
 
     
     /**
@@ -742,7 +741,7 @@ private:
                 return verror(errRLEInvalidHeader);
         }
 
-        if (checkHeaderIntegrity(phdr) != vok)
+        if (isValidHeader(phdr) != vok)
             return verror(errRLEInvalidHeader);
 
         return vok;
@@ -818,9 +817,9 @@ private:
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp
- * Revision         : 0.0.5-rc3
- * Content size     : 21243
- * Date / Time      : 16-09-2026 19:23:43
- * MD5              : 392e900d5bb4253dec883b71fa55f8e5
+ * Revision         : 0.0.5-rc4
+ * Content size     : 21230
+ * Date / Time      : 17-09-2026 01:09:41
+ * MD5              : 8a9510399ba8535a1a9eaf3c2350e930
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

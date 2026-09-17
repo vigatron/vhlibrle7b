@@ -1,14 +1,14 @@
 /* ======================================================================================
  * Library       : vhlibrle7b
  * Description   : C++ library implementing a 7-bit Run-Length Encoding (RLE) algorithm
- * Revision      : 0.0.5-rc4
+ * Revision      : 0.0.5-rc5
  * Source        : https://github.com/vigatron/vhlibrle7b
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
- * Content size  : 21230
- * Date / Time   : 17-09-2026 01:09:41
- * MD5           : 8a9510399ba8535a1a9eaf3c2350e930
+ * Content size  : 25338
+ * Date / Time   : 17-09-2026 16:17:27
+ * MD5           : 2faf44289a11fd464e8f2ed6018f431f
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -866,9 +866,9 @@ private:
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp
- * Revision         : 0.0.5-rc4
- * Content size     : 21230
- * Date / Time      : 17-09-2026 01:09:41
- * MD5              : 8a9510399ba8535a1a9eaf3c2350e930
+ * Revision         : 0.0.5-rc5
+ * Content size     : 25338
+ * Date / Time      : 17-09-2026 16:17:27
+ * MD5              : 2faf44289a11fd464e8f2ed6018f431f
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

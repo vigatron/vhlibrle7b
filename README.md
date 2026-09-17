@@ -21,13 +21,8 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 ## Library Metadata
 
 * **Repository:** [https://github.com/vigatron/vhlibrle7b](https://github.com/vigatron/vhlibrle7b)
-<<<<<<< HEAD
 * **Revision:** `0.0.5`
 * **Main Header:** `src/vhlibrle7b.hpp`
-=======
-* **Revision:** `0.0.4`
-* **Header Path:** `src/vhlibrle7b.hpp`
->>>>>>> main
 * **Author:** Viktor Glebov (`V01G04A81`)
 * **Copyright:** © 2026 Viktor Glebov
 * **License:** [MIT](https://opensource.org/licenses/MIT)

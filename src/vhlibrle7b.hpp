@@ -58,8 +58,7 @@ public:
     enum Status : uint32_t
     {
         okstat = 0,
-        
-        
+
         errSrcMemorySize,
         errSrcInvalid,
         errSrcVersion,
@@ -102,10 +101,14 @@ public:
     };
 
     /**
-     * @brief   Pack data array using `Memory Block mode`
-     * @param
-     * @param
-     * @return
+     * @brief Pack data array using `Memory Block mode`
+     * @param srcptr Pointer to the raw input data buffer (must be 32-bit aligned).
+     * @param srcsize Size of the raw input data in bytes.
+     * @param dstptr Pointer to the output destination buffer (must be 32-bit aligned).
+     * @param dstsize Total capacity of the destination buffer in bytes.
+     * @param minRLE Minimum repeating sequence length to trigger RLE encoding (must be >= 4).
+     * @param maxSIZ Maximum allowed span size in bytes (must be in range [4, 127]).
+     * @return Status::vok on success, or appropriate Status error code on failure.
      */
     verr pack(
         const uint8_t *srcptr,
@@ -290,10 +293,9 @@ public:
     }
 
     /**
-     * @brief   Pack data array using `Stream Mode`
-     * @param
-     * @param
-     * @return
+     * @brief Pack data array using `Stream Mode`
+     * @param streams VHRLE7bStreams reference for stream operations.
+     * @return Status::errNotImplemented (currently not implemented).
      */
     verr pack_SMode(VHRLE7bStreams &streams)
     {
@@ -301,7 +303,10 @@ public:
     }
 
     /**
-     *
+     * @brief Validates a compressed VHRLE7b data block structure and integrity.
+     * @param ptrrle Pointer to the input compressed block (including header).
+     * @param rleblksize Total size of the compressed block in bytes.
+     * @return Status::vok if valid, error code otherwise.
      */
     verr checkRLE(const uint8_t *ptrrle, const uint32_t rleblksize)
     {
@@ -325,7 +330,7 @@ public:
         if (rleblksize < sizeof(sthdr))
             return errSrcMemorySize;
 
-        const VHRLE7b::sthdr * phdr = (VHRLE7b::sthdr *)ptrrle;
+        const VHRLE7b::sthdr *phdr = (VHRLE7b::sthdr *)ptrrle;
 
         if (isValidHeader(phdr) != vok)
             return verror(errRLEInvalidHeader);
@@ -369,19 +374,20 @@ public:
      */
     verr unpack(
         const uint8_t *pRLEbin,
-        const uint32_t srcsize,
-        const uint8_t *pBINout,
-        const uint32_t dstsize)
+        uint32_t srcsize,
+        uint8_t *pBINout,
+        uint32_t dstsize)
     {
 
-        stblockmode sblk = {
-            .srcptr = const_cast<uint8_t *>(pRLEbin),
-            .srcpos = 0,
-            .srcsz = srcsize,
+        stblockmode sblk;
 
-            .dstptr = const_cast<uint8_t *>(pBINout),
-            .dstpos = 0,
-            .dstsz = dstsize};
+        sblk.srcptr = const_cast<uint8_t *>(pRLEbin);
+        sblk.srcpos = 0;
+        sblk.srcsz = srcsize;
+
+        sblk.dstptr = const_cast<uint8_t *>(pBINout);
+        sblk.dstpos = 0;
+        sblk.dstsz = dstsize;
 
         return unpack_BMode(sblk);
     }
@@ -394,26 +400,30 @@ public:
      * @param dstsize Maximum capacity of destination buffer in bytes
      * @return Status::vok on success, or appropriate error code on failure
      */
-    verr unpack_BMode(stblockmode & sblk, bool checkrle = true, bool checkdst = true)
+    verr unpack_BMode(stblockmode &sblk, bool checkrle = true, bool checkdst = true)
     {
         // Check alignment
-        if(vok != checkBlockRegions(sblk))
+        if (vok != checkBlockRegions(sblk))
             return verror(errBlockModeParams);
 
         const sthdr *phdr = ptrhdr(sblk.srcptr);
 
-        if(isValidHeader(phdr) != vok)
+        if (isValidHeader(phdr) != vok)
             return verror(errRLEInvalidHeader);
 
+        // Check RLE source block size
+        if (sblk.srcsz - sizeof(sthdr) != phdr->rlesize)
+            return errSrcInvalid;
+
         // Not enough output buffer space for decompressed data
-        if ( sblk.dstsz < phdr->srcsize)
+        if (sblk.dstsz < phdr->srcsize)
             return verror(errDestMemorySize);
 
         // Check RLE CRC
-        if(checkrle)
+        if (checkrle)
         {
-            uint32_t crcrle = calcBlockCRC32( sblk.srcptr + sizeof(sthdr), phdr->rlesize);
-            if( crcrle != phdr->crc32rle)
+            uint32_t crcrle = calcBlockCRC32(sblk.srcptr + sizeof(sthdr), phdr->rlesize);
+            if (crcrle != phdr->crc32rle)
                 return verror(errRLECRC);
         }
 
@@ -450,10 +460,10 @@ public:
             return verror(errInternal);
 
         // Check results CRC32
-        if(checkdst)
+        if (checkdst)
         {
             uint32_t crc = calcBlockCRC32(sblk.dstptr, phdr->srcsize);
-            if(crc != phdr->crc32src)
+            if (crc != phdr->crc32src)
                 return verror(errDSTCRC);
         }
 
@@ -469,6 +479,10 @@ public:
      */
     verr unpack_SMode(VHRLE7bStreams &streams, bool checkrle = true, bool checkdst = true)
     {
+        // Callbacks initialized ?
+        if (!streams.isInitialized())
+            return verror(errInternal);
+
         //
         sthdr hdr;
 
@@ -478,8 +492,10 @@ public:
 
         // Check RLE source block first
         if (checkrle)
+        {
             if (checkRLE_SMode(streams, &hdr) != vok)
-                return verr(errCheckFailed);
+                return verror(errCheckFailed);
+        }
 
         streams.SetRStreamPos(sizeof(sthdr));
         streams.SetWStreamPos(0);
@@ -521,7 +537,9 @@ public:
     }
 
     /**
-     *
+     * @brief Get pointer to header structure from compressed block
+     * @param pbin Pointer to compressed data block
+     * @return Pointer to sthdr structure
      */
     const sthdr *ptrhdr(const uint8_t *pbin)
     {
@@ -530,9 +548,11 @@ public:
     }
 
     /**
-     *
+     * @brief Validates VHRLE7b header structure
+     * @param phdr Pointer to header structure
+     * @return Status::vok if valid, or appropriate Status error code
      */
-    verr isValidHeader(const sthdr * phdr)
+    verr isValidHeader(const sthdr *phdr)
     {
         // Check pfx
         for (size_t i = 0; i < sizeof(sthdr::pfx); i++)
@@ -545,10 +565,6 @@ public:
 
         // Spans non-zero ?
         if (!phdr->spans)
-            return verror(errSrcInvalid);
-
-        // enought src bytes ?
-        if (phdr->srcsize < sizeof(sthdr))
             return verror(errSrcInvalid);
 
         return vok;
@@ -565,7 +581,10 @@ private:
     }
 
     /**
-     *
+     * @brief Calculate duplicate count starting from pointer
+     * @param ptr Pointer to the start of the byte sequence
+     * @param sz Size of the sequence in bytes
+     * @return Number of consecutive identical bytes
      */
     size_t calcDubsCount(const uint8_t *ptr, size_t sz)
     {
@@ -584,7 +603,11 @@ private:
     }
 
     /**
-     *
+     * @brief Calculate CRC32 checksum for a block of data.
+     * @param data Pointer to the data buffer.
+     * @param len Size of the data buffer in bytes.
+     * @param crc Initial CRC value (default: 0xFFFFFFFF).
+     * @return Calculated CRC32 value.
      */
     uint32_t calcBlockCRC32(
         const uint8_t *data,
@@ -601,7 +624,9 @@ private:
     }
 
     /**
-     *
+     * @brief Check if a pointer is 4-byte aligned.
+     * @param ptr Pointer to check.
+     * @return true if aligned, false otherwise.
      */
     bool checkalign(const uint8_t *ptr)
     {
@@ -609,9 +634,11 @@ private:
     }
 
     /**
-     * 
+     * @brief Validate block mode parameters (alignment and size)
+     * @param sblk stblockmode reference for source/destination buffers
+     * @return Status::vok if valid, or appropriate Status error code
      */
-    verr checkBlockRegions(const stblockmode & sblk)
+    verr checkBlockRegions(const stblockmode &sblk)
     {
         if (sblk.srcsz < sizeof(sthdr))
             return verror(errRLESourceInvalid);
@@ -625,13 +652,14 @@ private:
         return vok;
     }
 
-        // // Verify total consumed bytes match source size
-        // if (sblk.dstpos != sblk.dstsiz)
-        //     return errInternal;
-
-    
     /**
-     *
+     * @brief Calculate CRC32 checksum for stream data
+     * @param streams VHRLE7bStreams reference for stream operations
+     * @param startoffs Start offset in stream for CRC calculation
+     * @param bytescount Number of bytes to calculate CRC for
+     * @param pdst Pointer to output buffer for CRC value
+     * @param crc Initial CRC value (default: 0xFFFFFFFF)
+     * @return true on success, false otherwise
      */
     bool calcCRC32_SIn(
         VHRLE7bStreams &streams,
@@ -661,11 +689,13 @@ private:
     //  BMode I/O
     // -----------------------------
 
-
     /**
-     *
+     * @brief Read single byte from compressed RLE block
+     * @param blk stblockmode reference for source/destination buffers
+     * @param pbyte Pointer to output buffer
+     * @return Status::vok on success, or appropriate Status error code
      */
-    verr readDataByte_BMode(stblockmode & blk, uint8_t *pbyte)
+    verr readDataByte_BMode(stblockmode &blk, uint8_t *pbyte)
     {
         // Validate stream boundaries
         if (blk.srcpos >= blk.srcsz)
@@ -676,9 +706,12 @@ private:
     }
 
     /**
-     * @brief Read databyte and store dubs `cnt`
+     * @brief Unpack RLE chunk with count `cnt` into destination buffer
+     * @param blk stblockmode reference for source/destination buffers
+     * @param cnt Number of bytes to copy from the RLE symbol
+     * @return Status::vok on success, or appropriate error code on failure
      */
-    verr unpack_RLEChunk_BMode(stblockmode & blk, uint8_t cnt)
+    verr unpack_RLEChunk_BMode(stblockmode &blk, uint8_t cnt)
     {
         showline_RLE_cnt(cnt);
 
@@ -700,9 +733,12 @@ private:
     }
 
     /**
-     *
+     * @brief Unpack STD (Literal) chunk with count `cnt` into destination buffer
+     * @param blk stblockmode reference for source/destination buffers
+     * @param cnt Number of bytes to copy from source directly
+     * @return Status::vok on success, or appropriate error code on failure
      */
-    verr unpack_STDChunk_BMode(stblockmode & blk, uint8_t cnt)
+    verr unpack_STDChunk_BMode(stblockmode &blk, uint8_t cnt)
     {
         showline_STD_cnt(cnt);
 
@@ -728,7 +764,10 @@ private:
     // ------------------------------------------------------
 
     /**
-     *
+     * @brief Read header structure from VHRLE7b stream
+     * @param streams VHRLE7bStreams reference for stream operations
+     * @param phdr Pointer to header structure for output
+     * @return Status::vok on success, or appropriate Status error code
      */
     verr readHeader_SMode(VHRLE7bStreams &streams, sthdr *phdr)
     {
@@ -748,7 +787,11 @@ private:
     }
 
     /**
-     * @brief Read databyte and store dubs `cnt`
+     * @brief Unpack RLE chunk with count `cnt` into destination buffer
+     * @param streams VHRLE7bStreams reference for stream operations
+     * @param phdr Pointer to header structure
+     * @param cnt Number of bytes to copy from the RLE symbol
+     * @return Status::vok on success, or appropriate Status error code
      */
     verr unpack_RLEChunk_SMode(VHRLE7bStreams &streams, sthdr *phdr, uint8_t cnt)
     {
@@ -769,7 +812,11 @@ private:
     }
 
     /**
-     * @brief Transfer `cnt` databytes from RLE src to dst
+     * @brief Unpack STD (Literal) chunk with count `cnt` into destination buffer
+     * @param streams VHRLE7bStreams reference for stream operations
+     * @param phdr Pointer to header structure
+     * @param cnt Number of bytes to copy from source directly
+     * @return Status::vok on success, or appropriate Status error code
      */
     verr unpack_STDChunk_SMode(VHRLE7bStreams &streams, sthdr *phdr, uint8_t cnt)
     {
@@ -794,7 +841,8 @@ private:
     // -----------------------------
 
     /**
-     *
+     * @brief Debug: Print RLE count to console
+     * @param cnt Number of bytes in RLE chunk
      */
     void showline_RLE_cnt(uint8_t cnt)
     {
@@ -804,7 +852,8 @@ private:
     }
 
     /**
-     *
+     * @brief Debug: Print STD count to console
+     * @param cnt Number of bytes in RLE chunk
      */
     void showline_STD_cnt(uint8_t cnt)
     {

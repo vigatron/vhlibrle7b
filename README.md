@@ -1,3 +1,10 @@
+<head>
+  <meta name="description" content="Lightweight header-only C++11 library for 7-bit RLE compression on ARM Cortex-M, ESP32, and STM32.">
+  <meta property="og:title" content="vhlibrle7b">
+  <meta property="og:description" content="Embedded 7-bit RLE Compression Library">
+  <meta property="og:image" content="https://raw.githubusercontent.com/vigatron/vhlibrle7b/main/docs/vhlibrle7b_logo_1200x630_transparent.png">
+</head>
+
 # vhlibrle7b — Embedded 7-bit RLE Compression Library
 
 [![Revision](https://img.shields.io/badge/revision-0.0.5-blue.svg)](https://github.com/vigatron/vhlibrle7b)
@@ -14,8 +21,13 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 ## Library Metadata
 
 * **Repository:** [https://github.com/vigatron/vhlibrle7b](https://github.com/vigatron/vhlibrle7b)
+<<<<<<< HEAD
 * **Revision:** `0.0.5`
 * **Main Header:** `src/vhlibrle7b.hpp`
+=======
+* **Revision:** `0.0.4`
+* **Header Path:** `src/vhlibrle7b.hpp`
+>>>>>>> main
 * **Author:** Viktor Glebov (`V01G04A81`)
 * **Copyright:** © 2026 Viktor Glebov
 * **License:** [MIT](https://opensource.org/licenses/MIT)

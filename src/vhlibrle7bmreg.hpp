@@ -7,8 +7,8 @@
  * License       : MIT
  * File          : src/vhlibrle7bmreg.hpp
  * Content size  : 3006
- * Date / Time   : 18-09-2026 20:49:51
- * MD5           : 170a5c3d915a12d528eefee17f516f2d
+ * Date / Time   : 18-09-2026 21:38:13
+ * MD5           : 2777288eef8256717c91a09587b24896
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -110,7 +110,7 @@ public:
     verr writebyte(uint8_t v)
     {
         if (!bytesleft())
-            return verror(VHRLE7BERR::errSrcOutOfRange);
+            return verror(VHRLE7BERR::errIODestination);
 
         _ptr[pos++] = v;
         return vok;
@@ -135,7 +135,7 @@ private:
  * File             : src/vhlibrle7bmreg.hpp
  * Revision         : 0.1.0
  * Content size     : 3006
- * Date / Time      : 18-09-2026 20:49:51
- * MD5              : 170a5c3d915a12d528eefee17f516f2d
+ * Date / Time      : 18-09-2026 21:38:13
+ * MD5              : 2777288eef8256717c91a09587b24896
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

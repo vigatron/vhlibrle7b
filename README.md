@@ -24,7 +24,7 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 
 ## Key Features
 
-* **Header-Only Core:** Core algorithms are header-only, requires 4 additional header files (`vhlibrle7binc.hpp`, `vhlibrle7berrs.hpp`, `vhlibrle7bmem.hpp`, `vhlibrle7bstrm.hpp`) for full functionality.
+* **Header-Only Core:** Core algorithms are header-only, requires 5 additional header files (`vhlibrle7binc.hpp`, `vhlibrle7berrs.hpp`, `vhlibrle7bmem.hpp`, `vhlibrle7bmreg.hpp`, `vhlibrle7bstrm.hpp`) for full functionality.
 * **Dual-Mode 7-Bit Encoding:** Dynamically splits data streams into **RLE** (run-length) and **Literal (STD)** spans with minimal control overhead.
 * **Integrity Protection:** Computes CRC32 checksums for both uncompressed source data and compressed payload, uses standard polynomial 0xEDB88320.
 * **Hardware Safe:** Built-in address alignment checks prevent unaligned memory access crashes on RISC/ARM platforms.
@@ -39,7 +39,9 @@ The library provides two distinct API architectures to fit different embedded co
 
 * **BMode (Block Mode):** Memory Block operation. Available since the initial version. Best for in-RAM compression/decompression where both source and destination buffers are fully allocated and aligned.
 * **SMode (Stream Mode):** Byte-per-byte I/O stream. Introduced in **rev 0.0.5**, this callback-oriented API minimizes RAM footprint. Ideal for streaming data directly to/from peripherals (e.g., SPI Flash, SD Card, UART) without buffering the entire payload in RAM. 
-* **Note:** Compression (`pack_SMode`) is currently under development (returns `errNotImplemented` in v0.1.0).
+
+**Notes**
+Compression (`pack_SMode`) not implemented, is currently under development (returns `errNotImplemented` in v0.1.0). Empty data not supported.
 
 ## API Reference
 
@@ -58,25 +60,6 @@ The library provides two distinct API architectures to fit different embedded co
 | `VHRLE7b::checkRLE_SMode()` | Validate compressed data in Stream Mode |
 | `VHRLE7b::ptrhdr()` | Get pointer to header structure |
 | `VHRLE7b::isValidHeader()` | Validate header structure |
-
-
-### Error Codes
-
-| Error Code | Description |
-|------------|-------------|
-| `errDestMemorySize` | Destination buffer too small |
-| `errSettings` | Invalid parameter constraints |
-| `errAlign` | Source or destination pointer not 4-byte aligned |
-| `errWrite` | Compressed data exceeded destination buffer bounds |
-| `errRLEInvalidHeader` | Invalid header structure |
-| `errRLESourceInvalid` | Invalid RLE source data |
-| `errRLECRC` | CRC32 checksum mismatch |
-| `errDSTCRC` | Destination CRC32 mismatch |
-| `errSrcInvalid` | Invalid source data |
-| `errSrcVersion` | Reserved field not zero |
-| `errInternal` | Internal error |
-| `errIOSource` | Read from source failed |
-| `errIODestination` | Write to destination failed |
 
 
 ---

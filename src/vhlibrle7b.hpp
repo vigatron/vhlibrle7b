@@ -6,9 +6,9 @@
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
- * Content size  : 25280
- * Date / Time   : 18-09-2026 20:49:51
- * MD5           : 5d663676ce145c0f18e083571c1a2ac6
+ * Content size  : 25404
+ * Date / Time   : 18-09-2026 21:38:13
+ * MD5           : fe25a077abb8d91601d53c915a173723
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -242,11 +242,11 @@ public:
     verr checkRLE_BMode(VHRLE7bMemRegion &mem)
     {
         if (!mem.checkalign())
-            return VHRLE7BERR::errAlign;
+            return verror(VHRLE7BERR::errAlign);
 
         // Check limit
         if (mem.size() < sizeof(sthdr))
-            return VHRLE7BERR::errSrcMemorySize;
+            return verror(VHRLE7BERR::errSrcMemorySize);
 
         const VHRLE7b::sthdr *phdr = (VHRLE7b::sthdr *)mem.ptr();
 
@@ -598,10 +598,10 @@ private:
         printf("Write RLE @ %d  `%d`x%d\n", (int)pos, sym, (int)cnt);
 #endif
         if (vok != mem.writebyte(0x80 | cnt))
-            return verror(1);
+            return verror(VHRLE7BERR::errIODestination);
 
         if (vok != mem.writebyte(sym))
-            return verror(2);
+            return verror(VHRLE7BERR::errIODestination);
 
         return vok;
     };
@@ -615,7 +615,7 @@ private:
         printf("Write STD @ %d x%d :", (int)pos, (int)cnt);
 #endif
         if (vok != mem.writebyte(cnt))
-            return verror(1);
+            return verror(VHRLE7BERR::errIODestination);
 
         for (uint8_t i = 0; i < cnt; i++)
         {
@@ -623,7 +623,7 @@ private:
             printf(" %d", pbin[i]);
 #endif
             if (vok != mem.writebyte(pbin[i]))
-                return verror(2);
+                return verror(VHRLE7BERR::errIODestination);
         }
 
 #if defined(DEBUG_VHRLE7B)
@@ -800,8 +800,8 @@ private:
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp
  * Revision         : 0.1.0
- * Content size     : 25280
- * Date / Time      : 18-09-2026 20:49:51
- * MD5              : 5d663676ce145c0f18e083571c1a2ac6
+ * Content size     : 25404
+ * Date / Time      : 18-09-2026 21:38:13
+ * MD5              : fe25a077abb8d91601d53c915a173723
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

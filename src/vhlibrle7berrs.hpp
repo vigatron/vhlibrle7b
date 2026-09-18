@@ -7,8 +7,8 @@
  * License       : MIT
  * File          : src/vhlibrle7berrs.hpp
  * Content size  : 829
- * Date / Time   : 18-09-2026 20:43:08
- * MD5           : 283c4b4158b5f0f64ab228a56900af4d
+ * Date / Time   : 18-09-2026 20:49:51
+ * MD5           : beba1802664244668f7f596c9ec63652
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -27,6 +27,7 @@ namespace VHRLE7BERR
 
         errSrcOutOfRange,   // Source BMode reader
         errDstOutOfRange,   // Destination BMode writer
+        errOutOfRange,
 
         errSrcMemorySize,
         errSrcInvalid,
@@ -39,7 +40,6 @@ namespace VHRLE7BERR
         errSettings,
         errAlign,
         errWrite,
-        errOutOfRange,
         errInternal,
 
         // Wrong CRC
@@ -69,7 +69,7 @@ namespace VHRLE7BERR
  * File             : src/vhlibrle7berrs.hpp
  * Revision         : 0.1.0
  * Content size     : 829
- * Date / Time      : 18-09-2026 20:43:08
- * MD5              : 283c4b4158b5f0f64ab228a56900af4d
+ * Date / Time      : 18-09-2026 20:49:51
+ * MD5              : beba1802664244668f7f596c9ec63652
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

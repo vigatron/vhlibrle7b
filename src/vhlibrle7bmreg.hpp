@@ -6,9 +6,9 @@
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7bmreg.hpp
- * Content size  : 2988
- * Date / Time   : 18-09-2026 20:43:08
- * MD5           : 5439730cf85ae499f1525ef4683340c1
+ * Content size  : 3006
+ * Date / Time   : 18-09-2026 20:49:51
+ * MD5           : 170a5c3d915a12d528eefee17f516f2d
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -51,7 +51,7 @@ public:
      * @brief Get size of memory region in bytes.
      * @return Size in bytes.
      */
-    const size_t size() const { return sz; }
+    size_t size() const { return sz; }
 
     /**
      * @brief Check if a pointer is byte-aligned.
@@ -90,7 +90,7 @@ public:
             pos = position;
             return vok;
         }
-        return verror(1);
+        return verror(VHRLE7BERR::errOutOfRange);
     }
 
     /**
@@ -134,8 +134,8 @@ private:
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7bmreg.hpp
  * Revision         : 0.1.0
- * Content size     : 2988
- * Date / Time      : 18-09-2026 20:43:08
- * MD5              : 5439730cf85ae499f1525ef4683340c1
+ * Content size     : 3006
+ * Date / Time      : 18-09-2026 20:49:51
+ * MD5              : 170a5c3d915a12d528eefee17f516f2d
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

@@ -121,13 +121,14 @@ int main() {
 #include "vhlibrle7b.hpp"
 #include <stdio.h>
 
-// Example callback functions for stream I/O
+// Example callback function `ReadByte` for stream I/O
 bool ReadDataCallback(uint8_t *byte, uint32_t pos) {
     // Read byte from peripheral (e.g. SPI Flash / UART) at position 'pos'
     return true; 
 }
 
-bool WriteDataCallback(uint8_t byte, uint32_t pos) {
+// Example callback function `WriteByte` for stream I/O
+bool WriteDataCallback(uint8_t byte, uint32_t pos, void * phdr) {
     // Write decompressed byte to target storage at position 'pos'
     return true;
 }

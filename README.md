@@ -28,7 +28,7 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 * **Dual-Mode 7-Bit Encoding:** Dynamically splits data streams into **RLE** (run-length) and **Literal (STD)** spans with minimal control overhead.
 * **Integrity Protection:** Computes CRC32 checksums for both uncompressed source data and compressed payload, uses standard polynomial 0xEDB88320.
 * **Hardware Safe:** Built-in address alignment checks prevent unaligned memory access crashes on RISC/ARM platforms.
-* **Configurable Parameters:** Custom thresholds for minimum sequence run-length (`minRLE`) and maximum span length (`maxSIZ`).
+* **Configurable Parameters:** Custom thresholds for minimum sequence run-length (`minRLE`) and maximum span length (`maxRLE`).
 * **Endianness Support** Native little-endian byte ordering.
 
 ---
@@ -38,8 +38,8 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 The library provides two distinct API architectures to fit different embedded constraints:
 
 * **BMode (Block Mode):** Memory Block operation. Available since the initial version. Best for in-RAM compression/decompression where both source and destination buffers are fully allocated and aligned.
-* **SMode (Stream Mode):** Byte-per-byte I/O stream. Introduced in **rev 0.0.5**, this callback-oriented API minimizes RAM footprint. Ideal for streaming data directly to/from peripherals (e.g., SPI Flash, SD Card, UART) without buffering the entire payload in RAM.
-
+* **SMode (Stream Mode):** Byte-per-byte I/O stream. Introduced in **rev 0.0.5**, this callback-oriented API minimizes RAM footprint. Ideal for streaming data directly to/from peripherals (e.g., SPI Flash, SD Card, UART) without buffering the entire payload in RAM. 
+* **Note:** Compression (`pack_SMode`) is currently under development (returns `errNotImplemented` in v0.1.0).
 
 ## API Reference
 
@@ -49,7 +49,7 @@ The library provides two distinct API architectures to fit different embedded co
 |--------|-------------|
 | `VHRLE7b::pack()` | Pack data array using Block Mode |
 | `VHRLE7b::pack_BMode()` | Pack data using Block Mode API |
-| `VHRLE7b::pack_SMode()` | Pack data using Stream Mode API |
+| `VHRLE7b::pack_SMode()` | Pack data using Stream Mode API *(Not implemented in v0.1.0)* |
 | `VHRLE7b::unpack()` | Unpack data using Block Mode |
 | `VHRLE7b::unpack_BMode()` | Unpack data using Block Mode API |
 | `VHRLE7b::unpack_SMode()` | Unpack data using Stream Mode API |
@@ -58,7 +58,6 @@ The library provides two distinct API architectures to fit different embedded co
 | `VHRLE7b::checkRLE_SMode()` | Validate compressed data in Stream Mode |
 | `VHRLE7b::ptrhdr()` | Get pointer to header structure |
 | `VHRLE7b::isValidHeader()` | Validate header structure |
-| `VHRLE7b::get_hdrpfx()` | Get header prefix signature |
 
 
 ### Error Codes
@@ -92,17 +91,23 @@ The library provides two distinct API architectures to fit different embedded co
 int main() {
     uint8_t input[] = {0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42};
     uint8_t output[128];
+    uint8_t decompressed[128];
     VHRLE7b rle;
     
-    // Pack data
+    // 1. Pack data into output buffer
     verr err = rle.pack(input, sizeof(input), output, sizeof(output), 4, 127);
-    if (err != VHRLE7b::vok) {
+    if (err != vok) {
         // Handle error
     }
     
-    // Unpack data
-    verr unerr = rle.unpack(output, sizeof(output), input, sizeof(input));
-    if (unerr != VHRLE7b::vok) {
+    // Get actual compressed payload size from the generated header
+    const VHRLE7b::sthdr *hdr = rle.ptrhdr(output);
+    uint32_t total_rle_size = sizeof(VHRLE7b::sthdr) + hdr->rlesize;
+
+    // 2. Unpack data: 
+    // Arguments: (compressed_input, compressed_size, destination_buffer, destination_capacity)
+    verr unerr = rle.unpack(output, total_rle_size, decompressed, sizeof(decompressed));
+    if (unerr != vok) {
         // Handle error
     }
     
@@ -116,25 +121,30 @@ int main() {
 #include "vhlibrle7b.hpp"
 #include <stdio.h>
 
+// Example callback functions for stream I/O
+bool ReadDataCallback(uint8_t *byte, uint32_t pos) {
+    // Read byte from peripheral (e.g. SPI Flash / UART) at position 'pos'
+    return true; 
+}
+
+bool WriteDataCallback(uint8_t byte, uint32_t pos) {
+    // Write decompressed byte to target storage at position 'pos'
+    return true;
+}
+
 int main() {
-    VHRLE7bStreams streams;
+
     VHRLE7b rle;
     
-    // Initialize streams
-    streams.Init();
-    streams.SetReadCallback([](void* context, const uint8_t* data, size_t size) {
-        // Read logic from peripheral
-    });
-    streams.SetWriteCallback([](void* context, const uint8_t* data, size_t size) {
-        // Write logic to peripheral
-    });
-    
-    // Pack data using stream mode
-    verr err = rle.pack_SMode(streams);
-    
-    // Unpack data using stream mode
-    verr unerr = rle.unpack_SMode(streams, true, true);
-    
+    // Pass read and write callbacks directly to the constructor
+    VHRLE7bStreams streams(ReadDataCallback, WriteDataCallback);
+
+    // Unpack data using stream mode (checkrle and checkdst are true by default)
+    verr unerr = rle.unpack_SMode(streams);
+    if (unerr != vok) {
+        // Handle decompression error
+    }
+
     return 0;
 }
 ```

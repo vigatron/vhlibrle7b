@@ -6,9 +6,9 @@
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
- * Content size  : 25059
- * Date / Time   : 18-09-2026 18:42:50
- * MD5           : 7a288efbfcfd26fb62cc4b18b2bdf394
+ * Content size  : 25119
+ * Date / Time   : 18-09-2026 19:54:26
+ * MD5           : 78824aae3407ffcd8503e404b615250b
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -63,7 +63,7 @@ public:
      * @return Status::vok on success, or appropriate Status error code on failure.
      */
     verr pack(
-        uint8_t *srcptr,
+        const uint8_t *srcptr,
         uint32_t srcsize,
         uint8_t *dstptr,
         uint32_t dstsize,
@@ -71,7 +71,9 @@ public:
         uint8_t maxRLE)
     {
         //
-        VHRLE7bMemRegion inpmem(srcptr, srcsize);
+        uint8_t *pbin = const_cast<uint8_t *>(srcptr);
+
+        VHRLE7bMemRegion inpmem(pbin, srcsize);
         VHRLE7bMemRegion outmem(dstptr, dstsize);
         VHRLE7bMemRegions regions(inpmem, outmem);
         return pack_BMode(regions, minRLE, maxRLE);
@@ -794,8 +796,8 @@ private:
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp
  * Revision         : 0.1.0
- * Content size     : 25059
- * Date / Time      : 18-09-2026 18:42:50
- * MD5              : 7a288efbfcfd26fb62cc4b18b2bdf394
+ * Content size     : 25119
+ * Date / Time      : 18-09-2026 19:54:26
+ * MD5              : 78824aae3407ffcd8503e404b615250b
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

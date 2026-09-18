@@ -1,14 +1,14 @@
 /* ======================================================================================
  * Library       : vhlibrle7b
  * Description   : C++ library implementing a 7-bit Run-Length Encoding (RLE) algorithm
- * Revision      : 0.0.5-rc5
+ * Revision      : 0.1.0
  * Source        : https://github.com/vigatron/vhlibrle7b
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7bstrm.hpp
- * Content size  : 3510
- * Date / Time   : 17-09-2026 16:17:27
- * MD5           : fe97a4ea062b7efa7f9a574deb492038
+ * Content size  : 2909
+ * Date / Time   : 18-09-2026 18:42:50
+ * MD5           : 806277bee71327f0c1fdb2bd751541f9
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -30,10 +30,10 @@ public:
     // Single-byte API: both funcs should be valid for sbyte mode
 
     /**
-     * @brief Конструктор инициализации потоков
-     * @param rbyte Callback функция для ввода данных
-     * @param wbyte Callback функция для вывода данных
-     * @return void - инициализация потоков
+     * @brief Constructs the stream objects and initializes them
+     * @param rbyte Callback function for input data
+     * @param wbyte Callback function for output data
+     * @return void - stream initialization completed
      */
     VHRLE7bStreams(
         CallbackFunc_VHLIBRLE7B_IDATA rbyte,
@@ -46,8 +46,8 @@ public:
     }
 
     /**
-     * @brief Проверяет, инициализированы ли потоки корректно
-     * @return bool - true если все callback функции инициализированы
+     * @brief Verifies whether streams are correctly initialized
+     * @return bool - true if all callback functions are initialized
      */
     bool isInitialized()
     {
@@ -55,45 +55,43 @@ public:
     }
 
     /**
-     * @brief Читает один байт из потока
-     * @param databyte Указатель на буфер для вывода данных
-     * @return bool - true при успешном чтении
+     * @brief Reads one byte from the stream
+     * @param databyte Pointer to buffer for output data
+     * @return bool - true on successful read
      */
     bool readbyte(uint8_t *databyte) { return getbyte(databyte, rpos++); }
 
     /**
-     * @brief Записывает один байт в поток
-     * @param databyte Данные для записи
-     * @param phdr Дополнительные данные
-     * @return bool - true при успешной записи
+     * @brief Writes one byte to the stream
+     * @param databyte Data to write
+     * @param phdr Additional data
+     * @return bool - true on successful write
      */
     bool writebyte(uint8_t databyte, void *phdr) { return putbyte(databyte, wpos++, phdr); }
 
     /**
-     * @brief Устанавливает позицию ввода
-     * @param pos Позиция чтения
-     * @return void - установка позиции
+     * @brief Sets the read stream position
+     * @param pos Read position
+     * @return void - position set
      */
     void SetRStreamPos(size_t pos) { rpos = pos; }
 
     /**
-     * @brief Устанавливает позицию вывода
-     * @param pos Позиция записи
-     * @return void - установка позиции
+     * @brief Sets the write stream position
+     * @param pos Write position
+     * @return void - position set
      */
-
     void SetWStreamPos(size_t pos) { wpos = pos; }
 
     /**
-     * @brief Возвращает позицию ввода
-     * @return size_t - текущая позиция чтения
+     * @brief Returns the read stream position
+     * @return size_t - current read position
      */
-
     size_t GetRStreamPos() { return rpos; }
 
     /**
-     * @brief Возвращает позицию вывода
-     * @return size_t - текущая позиция записи
+     * @brief Returns the write stream position
+     * @return size_t - current write position
      */
     size_t GetWStreamPos() { return wpos; }
 
@@ -106,10 +104,10 @@ private:
     size_t wpos;
 
     /**
-     * @brief Проверяет корректность указателей на функции
-     * @param funcIn Указатель на функцию ввода
-     * @param funcOut Указатель на функцию вывода
-     * @return bool - true если функции валидны
+     * @brief Validates callback function pointers
+     * @param funcIn Input function pointer
+     * @param funcOut Output function pointer
+     * @return bool - true if functions are valid
      */
     bool checkCallbacks(
         CallbackFunc_VHLIBRLE7B_IDATA funcIn,
@@ -125,9 +123,9 @@ private:
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7bstrm.hpp
- * Revision         : 0.0.5-rc5
- * Content size     : 3510
- * Date / Time      : 17-09-2026 16:17:27
- * MD5              : fe97a4ea062b7efa7f9a574deb492038
+ * Revision         : 0.1.0
+ * Content size     : 2909
+ * Date / Time      : 18-09-2026 18:42:50
+ * MD5              : 806277bee71327f0c1fdb2bd751541f9
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

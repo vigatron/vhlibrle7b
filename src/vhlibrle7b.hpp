@@ -1,14 +1,14 @@
 /* ======================================================================================
  * Library       : vhlibrle7b
  * Description   : C++ library implementing a 7-bit Run-Length Encoding (RLE) algorithm
- * Revision      : 0.0.5-rc5
+ * Revision      : 0.1.0
  * Source        : https://github.com/vigatron/vhlibrle7b
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
- * Content size  : 25338
- * Date / Time   : 17-09-2026 16:17:27
- * MD5           : 2faf44289a11fd464e8f2ed6018f431f
+ * Content size  : 25059
+ * Date / Time   : 18-09-2026 18:42:50
+ * MD5           : 7a288efbfcfd26fb62cc4b18b2bdf394
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -59,7 +59,7 @@ public:
      * @param dstptr Pointer to the output destination buffer (must be 32-bit aligned).
      * @param dstsize Total capacity of the destination buffer in bytes.
      * @param minRLE Minimum repeating sequence length to trigger RLE encoding (must be >= 4).
-     * @param maxSIZ Maximum allowed span size in bytes (must be in range [4, 127]).
+     * @param maxRLE Maximum allowed span size in bytes (must be in range [4, 127]).
      * @return Status::vok on success, or appropriate Status error code on failure.
      */
     verr pack(
@@ -259,8 +259,7 @@ public:
 
     /**
      * @brief Check RLE stream integrity / CRC of RLE data block without header
-     * @param funcIn Callback function for reading input data
-     * @param funcOut Callback function for writing output data
+     * @param streams VHRLE7bStreams reference for stream operations
      * @param phdr Pointer to header structure for validation
      * @return Status::vok if valid, or appropriate error code otherwise
      */
@@ -279,7 +278,7 @@ public:
     /**
      * @brief Decompresses a VHRLE7b encoded data in Block mode API and validates CRC32 checksums.
      * @param ptrsrc Pointer to the source compressed data block.
-     * @param srcsize Size of the source compressed data block in bytes.
+     * @param rlesize Size of the source compressed data block in bytes.
      * @param ptrdst Pointer to the destination output buffer.
      * @param dstsize Maximum capacity of the destination buffer in bytes.
      * @return Status::vok on success, or appropriate Status error code on failure.
@@ -290,20 +289,17 @@ public:
         uint8_t *pBINout,
         uint32_t dstsize)
     {
-
         VHRLE7bMemRegion inpmem(pRLEbin, rlesize);
         VHRLE7bMemRegion outmem(pBINout, dstsize);
         VHRLE7bMemRegions memregions(inpmem, outmem);
-
         return unpack_BMode(memregions);
     }
 
     /**
      * @brief Decompress RLE block / `memory block` mode
-     * @param pRLEbin Pointer to compressed RLE data block
-     * @param srcsize Size of source compressed data block in bytes
-     * @param pDATbin Pointer to destination output buffer
-     * @param dstsize Maximum capacity of destination buffer in bytes
+     * @param mem VHRLE7bMemRegions reference for source/destination buffers
+     * @param checkrle Check RLE source block before decompression (default: true)
+     * @param checkdst Check destination CRC32 after decompression (default: true)
      * @return Status::vok on success, or appropriate error code on failure
      */
     verr unpack_BMode(VHRLE7bMemRegions &mem, bool checkrle = true, bool checkdst = true)
@@ -380,9 +376,9 @@ public:
 
     /**
      * @brief Unpack RLE data array in `Stream Mode`
-     * @param funcIn Callback function for reading input data
-     * @param funcOut Callback function for writing output data
-     * @param checkbefore Optional flag to check before unpacking (default: true)
+     * @param streams VHRLE7bStreams reference for stream operations.
+     * @param checkrle Check RLE source block before unpacking (default: true)
+     * @param checkdst Check destination CRC32 after unpacking (default: true)
      * @return Status::vok on success, or appropriate error code on failure
      */
     verr unpack_SMode(VHRLE7bStreams &streams, bool checkrle = true, bool checkdst = true)
@@ -491,7 +487,7 @@ private:
     /**
      * @brief Calculate duplicate count starting from pointer
      * @param ptr Pointer to the start of the byte sequence
-     * @param sz Size of the sequence in bytes
+     * @param sz Size of the sequence in bytes (type: size_t)
      * @return Number of consecutive identical bytes
      */
     size_t calcDubsCount(const uint8_t *ptr, size_t sz)
@@ -632,7 +628,7 @@ private:
 
     /**
      * @brief Unpack RLE chunk with count `cnt` into destination buffer
-     * @param blk stblockmode reference for source/destination buffers
+     * @param mem VHRLE7bMemRegions reference for source/destination buffers
      * @param cnt Number of bytes to copy from the RLE symbol
      * @return Status::vok on success, or appropriate error code on failure
      */
@@ -680,10 +676,10 @@ private:
         // Unpack STD chunk
         for (uint8_t i = 0; i < cnt; i++)
         {
-            if(vok != mem.src().readByte(&sym))
+            if (vok != mem.src().readByte(&sym))
                 return verror(VHRLE7BERR::errSrcMemorySize);
-            
-            if(vok != mem.dst().writebyte(sym))
+
+            if (vok != mem.dst().writebyte(sym))
                 return verror(VHRLE7BERR::errDestMemorySize);
         }
 
@@ -797,9 +793,9 @@ private:
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp
- * Revision         : 0.0.5-rc5
- * Content size     : 25338
- * Date / Time      : 17-09-2026 16:17:27
- * MD5              : 2faf44289a11fd464e8f2ed6018f431f
+ * Revision         : 0.1.0
+ * Content size     : 25059
+ * Date / Time      : 18-09-2026 18:42:50
+ * MD5              : 7a288efbfcfd26fb62cc4b18b2bdf394
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

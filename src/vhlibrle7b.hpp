@@ -6,9 +6,9 @@
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
- * Content size  : 25404
- * Date / Time   : 18-09-2026 21:38:13
- * MD5           : fe25a077abb8d91601d53c915a173723
+ * Content size  : 25254
+ * Date / Time   : 19-09-2026 20:06:17
+ * MD5           : db18fd451bf41da8f2ebd4d88293c015
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -18,6 +18,7 @@
 
 #include "vhlibrle7binc.hpp"
 #include "vhlibrle7berrs.hpp"
+#include "vhlibrle7bcrc.hpp"
 #include "vhlibrle7bmem.hpp"
 #include "vhlibrle7bstrm.hpp"
 
@@ -67,8 +68,8 @@ public:
         uint32_t srcsize,
         uint8_t *dstptr,
         uint32_t dstsize,
-        uint8_t minRLE=4,
-        uint8_t maxRLE=127)
+        uint8_t minRLE = 4,
+        uint8_t maxRLE = 127)
     {
         //
         uint8_t *pbin = const_cast<uint8_t *>(srcptr);
@@ -100,11 +101,11 @@ public:
      */
     verr pack_BMode(
         VHRLE7bMemRegions &regions,
-        uint8_t minRLE=4,
-        uint8_t maxRLE=127)
+        uint8_t minRLE = 4,
+        uint8_t maxRLE = 127)
     {
         // Check src region before processing
-        if(!regions.src().size())
+        if (!regions.src().size())
             return verror(VHRLE7BERR::errSrcMemorySize);
 
         // Check dst region before processing
@@ -197,10 +198,13 @@ public:
         sthdr hdr;
         std::memcpy(hdr.pfx, get_hdrpfx(), sizeof(hdr.pfx));
         hdr.spans = spans_count;
+
         hdr.srcsize = regions.src().size();
-        hdr.crc32src = calcBlockCRC32(regions.src().ptr(), hdr.srcsize);
+        hdr.crc32src = VHRLE7bCRC32::calcBlockCRC32(regions.src().ptr(), hdr.srcsize);
+
         hdr.rlesize = compressed_data_size;
-        hdr.crc32rle = calcBlockCRC32(regions.dst().ptr() + sizeof(sthdr), compressed_data_size);
+        hdr.crc32rle = VHRLE7bCRC32::calcBlockCRC32(regions.dst().ptr() + sizeof(sthdr), compressed_data_size);
+
         hdr.reserved = 0;
 
         // Copy header to destination buffer start
@@ -258,7 +262,7 @@ public:
             return verror(VHRLE7BERR::errSrcMemorySize);
 
         // Check CRC
-        uint32_t crcrle = calcBlockCRC32(mem.ptr() + sizeof(sthdr), phdr->rlesize);
+        uint32_t crcrle = VHRLE7bCRC32::calcBlockCRC32(mem.ptr() + sizeof(sthdr), phdr->rlesize);
         bool checkcrc = crcrle == phdr->crc32rle;
         return checkcrc ? vok : verror(VHRLE7BERR::errCRC);
     }
@@ -330,7 +334,7 @@ public:
         // Check RLE CRC
         if (checkrle)
         {
-            uint32_t crcrle = calcBlockCRC32(mem.src().ptr() + sizeof(sthdr), phdr->rlesize);
+            uint32_t crcrle = VHRLE7bCRC32::calcBlockCRC32(mem.src().ptr() + sizeof(sthdr), phdr->rlesize);
             if (crcrle != phdr->crc32rle)
                 return verror(VHRLE7BERR::errRLECRC);
         }
@@ -369,10 +373,10 @@ public:
         if (mem.dst().getpos() != phdr->srcsize)
             return verror(VHRLE7BERR::errInternal);
 
-        // Check results CRC32
+        // Check CRC32 of unpacked region
         if (checkdst)
         {
-            uint32_t crc = calcBlockCRC32(mem.dst().ptr(), phdr->srcsize);
+            uint32_t crc = VHRLE7bCRC32::calcBlockCRC32(mem.dst().ptr(), phdr->srcsize);
             if (crc != phdr->crc32src)
                 return verror(VHRLE7BERR::errDSTCRC);
         }
@@ -407,7 +411,14 @@ public:
                 return verror(VHRLE7BERR::errCheckFailed);
         }
 
+        // Setup Input stream
+        streams.ResetRdCRC();
+        streams.EnableRdCRC(false);
         streams.SetRStreamPos(sizeof(sthdr));
+
+        // Setup Output stream
+        streams.ResetWrCRC();
+        streams.EnableWrCRC(checkdst);
         streams.SetWStreamPos(0);
 
         uint32_t spanscnt = hdr.spans;
@@ -442,7 +453,11 @@ public:
         if (streams.GetWStreamPos() != hdr.srcsize)
             return verror(VHRLE7BERR::errUnpackProcessFailed);
 
-        // CRC Check ?
+        // CRC Check
+        if (checkdst)
+            if (!streams.CheckRWCRC(hdr.crc32src))
+                return verror(VHRLE7BERR::errCRC);
+
         return vok;
     }
 
@@ -510,27 +525,6 @@ private:
                 break;
         }
         return cnt;
-    }
-
-    /**
-     * @brief Calculate CRC32 checksum for a block of data.
-     * @param data Pointer to the data buffer.
-     * @param len Size of the data buffer in bytes.
-     * @param crc Initial CRC value (default: 0xFFFFFFFF).
-     * @return Calculated CRC32 value.
-     */
-    uint32_t calcBlockCRC32(
-        const uint8_t *data,
-        size_t len,
-        uint32_t crc = 0xFFFFFFFF)
-    {
-        while (len--)
-        {
-            crc ^= *data++;
-            for (int i = 0; i < 8; i++)
-                crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
-        }
-        return ~crc;
     }
 
     /**
@@ -800,8 +794,8 @@ private:
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp
  * Revision         : 0.1.0
- * Content size     : 25404
- * Date / Time      : 18-09-2026 21:38:13
- * MD5              : fe25a077abb8d91601d53c915a173723
+ * Content size     : 25254
+ * Date / Time      : 19-09-2026 20:06:17
+ * MD5              : db18fd451bf41da8f2ebd4d88293c015
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

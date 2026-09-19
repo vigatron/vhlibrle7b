@@ -19,6 +19,7 @@ add_library(vhlib_rle7b INTERFACE)
 target_sources(vhlib_rle7b INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vhlibrle7binc.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vhlibrle7berrs.hpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vhlibrle7bcrc.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vhlibrle7bmreg.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vhlibrle7bmem.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vhlibrle7bstrm.hpp

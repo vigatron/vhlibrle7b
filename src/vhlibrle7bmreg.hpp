@@ -6,9 +6,9 @@
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7bmreg.hpp
- * Content size  : 3006
- * Date / Time   : 18-09-2026 21:38:13
- * MD5           : 2777288eef8256717c91a09587b24896
+ * Content size  : 3024
+ * Date / Time   : 19-09-2026 20:06:17
+ * MD5           : a3cfba95a039b9b41d0f9cea4f6a8743
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -129,13 +129,14 @@ private:
     uint8_t *_ptr;
     size_t pos;
     size_t sz;
+    uint32_t crc;
 };
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7bmreg.hpp
  * Revision         : 0.1.0
- * Content size     : 3006
- * Date / Time      : 18-09-2026 21:38:13
- * MD5              : 2777288eef8256717c91a09587b24896
+ * Content size     : 3024
+ * Date / Time      : 19-09-2026 20:06:17
+ * MD5              : a3cfba95a039b9b41d0f9cea4f6a8743
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

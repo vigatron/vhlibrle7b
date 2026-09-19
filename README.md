@@ -24,7 +24,7 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 
 ## Key Features
 
-* **Header-Only Core:** Core algorithms are header-only, requires 5 additional header files (`vhlibrle7binc.hpp`, `vhlibrle7berrs.hpp`, `vhlibrle7bmem.hpp`, `vhlibrle7bmreg.hpp`, `vhlibrle7bstrm.hpp`) for full functionality.
+* **Header-Only Core:** Core algorithms are header-only, requires 6 additional header files (`vhlibrle7binc.hpp`, `vhlibrle7berrs.hpp`, `vhlibrle7bmem.hpp`, `vhlibrle7bmreg.hpp`, `vhlibrle7bstrm.hpp`, `vhlibrle7bcrc.hpp`) for full functionality.
 * **Dual-Mode 7-Bit Encoding:** Dynamically splits data streams into **RLE** (run-length) and **Literal (STD)** spans with minimal control overhead.
 * **Integrity Protection:** Computes CRC32 checksums for both uncompressed source data and compressed payload, uses standard polynomial 0xEDB88320.
 * **Hardware Safe:** Built-in address alignment checks prevent unaligned memory access crashes on RISC/ARM platforms.

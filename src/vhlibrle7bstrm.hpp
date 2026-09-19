@@ -6,9 +6,9 @@
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7bstrm.hpp
- * Content size  : 2909
- * Date / Time   : 18-09-2026 21:38:13
- * MD5           : 806277bee71327f0c1fdb2bd751541f9
+ * Content size  : 4809
+ * Date / Time   : 19-09-2026 20:06:17
+ * MD5           : 69fbad751ab274acda50dcedf5859de0
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -59,7 +59,19 @@ public:
      * @param databyte Pointer to buffer for output data
      * @return bool - true on successful read
      */
-    bool readbyte(uint8_t *databyte) { return getbyte(databyte, rpos++); }
+    bool readbyte(uint8_t *databyte)
+    {
+        bool rd = getbyte(databyte, rpos);
+        if (!rd)
+            return false;
+
+        if (rd_crc_en)
+            rd_crc = VHRLE7bCRC32::calcStep(rd_crc, *databyte);
+
+        rpos++;
+
+        return true;
+    }
 
     /**
      * @brief Writes one byte to the stream
@@ -67,7 +79,18 @@ public:
      * @param phdr Additional data
      * @return bool - true on successful write
      */
-    bool writebyte(uint8_t databyte, void *phdr) { return putbyte(databyte, wpos++, phdr); }
+    bool writebyte(uint8_t databyte, void *phdr)
+    {
+        bool wr = putbyte(databyte, wpos, phdr);
+        if (!wr)
+            return false;
+
+        if(wr_crc_en)
+            wr_crc = VHRLE7bCRC32::calcStep(wr_crc, databyte);
+
+        wpos++;
+        return true;
+    }
 
     /**
      * @brief Sets the read stream position
@@ -95,6 +118,64 @@ public:
      */
     size_t GetWStreamPos() { return wpos; }
 
+    /**
+     * @brief Resets the read stream CRC to default polynomial value
+     * @return void - CRC reset completed
+     */
+    void ResetRdCRC()
+    {
+        rd_crc = VHRLE7bCRC32::DEF_POLY_VAL;
+    }
+
+    /**
+     * @brief Enables or disables CRC validation for read operations
+     * @param flag Enable (true) or disable (false) CRC checking
+     * @return void - CRC setting updated
+     */
+    void EnableRdCRC(bool flag)
+    {
+        rd_crc_en = flag;
+    }
+
+    /**
+     * @brief Checks if read CRC matches expected value
+     * @param crc Received CRC value to validate
+     * @return bool - true if CRC validation passed
+     */
+    bool CheckRdCRC(uint32_t crc)
+    {
+        return crc == ~rd_crc;
+    }
+
+    /**
+     * @brief Resets the write stream CRC to default polynomial value
+     * @return void - CRC reset completed
+     */
+    void ResetWrCRC()
+    {
+        wr_crc = VHRLE7bCRC32::DEF_POLY_VAL;
+    }
+
+    /**
+     * @brief Enables or disables CRC validation for write operations
+     * @param flag Enable (true) or disable (false) CRC checking
+     * @return void - CRC setting updated
+     */
+    void EnableWrCRC(bool flag)
+    {
+        wr_crc_en = flag;
+    }
+
+    /**
+     * @brief Checks if write CRC matches expected value
+     * @param crc Received CRC value to validate
+     * @return bool - true if CRC validation passed
+     */
+    bool CheckRWCRC(uint32_t crc)
+    {
+        return crc == ~wr_crc;
+    }
+
 private:
     //
     CallbackFunc_VHLIBRLE7B_IDATA getbyte;
@@ -102,6 +183,12 @@ private:
 
     size_t rpos;
     size_t wpos;
+
+    uint32_t rd_crc;
+    bool rd_crc_en;
+
+    uint32_t wr_crc;
+    bool wr_crc_en;
 
     /**
      * @brief Validates callback function pointers
@@ -124,8 +211,8 @@ private:
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7bstrm.hpp
  * Revision         : 0.1.0
- * Content size     : 2909
- * Date / Time      : 18-09-2026 21:38:13
- * MD5              : 806277bee71327f0c1fdb2bd751541f9
+ * Content size     : 4809
+ * Date / Time      : 19-09-2026 20:06:17
+ * MD5              : 69fbad751ab274acda50dcedf5859de0
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

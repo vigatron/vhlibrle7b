@@ -6,9 +6,9 @@
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7bstrm.hpp
- * Content size  : 4809
- * Date / Time   : 19-09-2026 20:06:17
- * MD5           : 69fbad751ab274acda50dcedf5859de0
+ * Content size  : 4846
+ * Date / Time   : 19-09-2026 20:18:21
+ * MD5           : 183e27639800c00ecacd42933e036e5b
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -37,7 +37,7 @@ public:
      */
     VHRLE7bStreams(
         CallbackFunc_VHLIBRLE7B_IDATA rbyte,
-        CallbackFunc_VHLIBRLE7B_ODATA wbyte)
+        CallbackFunc_VHLIBRLE7B_ODATA wbyte) : rd_crc_en(false), wr_crc_en(false)
     {
         getbyte = rbyte;
         putbyte = wbyte;
@@ -171,7 +171,7 @@ public:
      * @param crc Received CRC value to validate
      * @return bool - true if CRC validation passed
      */
-    bool CheckRWCRC(uint32_t crc)
+    bool CheckWrCRC(uint32_t crc)
     {
         return crc == ~wr_crc;
     }
@@ -211,8 +211,8 @@ private:
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7bstrm.hpp
  * Revision         : 0.1.0
- * Content size     : 4809
- * Date / Time      : 19-09-2026 20:06:17
- * MD5              : 69fbad751ab274acda50dcedf5859de0
+ * Content size     : 4846
+ * Date / Time      : 19-09-2026 20:18:21
+ * MD5              : 183e27639800c00ecacd42933e036e5b
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

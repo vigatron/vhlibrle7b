@@ -7,8 +7,8 @@
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
  * Content size  : 25254
- * Date / Time   : 19-09-2026 20:06:17
- * MD5           : db18fd451bf41da8f2ebd4d88293c015
+ * Date / Time   : 19-09-2026 20:18:21
+ * MD5           : e625f936f6349799a435aae462ffdf6d
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -455,7 +455,7 @@ public:
 
         // CRC Check
         if (checkdst)
-            if (!streams.CheckRWCRC(hdr.crc32src))
+            if (!streams.CheckWrCRC(hdr.crc32src))
                 return verror(VHRLE7BERR::errCRC);
 
         return vok;
@@ -795,7 +795,7 @@ private:
  * File             : src/vhlibrle7b.hpp
  * Revision         : 0.1.0
  * Content size     : 25254
- * Date / Time      : 19-09-2026 20:06:17
- * MD5              : db18fd451bf41da8f2ebd4d88293c015
+ * Date / Time      : 19-09-2026 20:18:21
+ * MD5              : e625f936f6349799a435aae462ffdf6d
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

@@ -1,13 +1,6 @@
-<head>
-  <meta name="description" content="Lightweight header-only C++11 library for 7-bit RLE compression on ARM Cortex-M, ESP32, and STM32.">
-  <meta property="og:title" content="vhlibrle7b">
-  <meta property="og:description" content="Embedded 7-bit RLE Compression Library">
-  <meta property="og:image" content="https://raw.githubusercontent.com/vigatron/vhlibrle7b/main/docs/vhlibrle7b_logo_1200x630_transparent.png">
-</head>
-
 # vhlibrle7b — Embedded 7-bit RLE Compression Library
 
-[![Revision](https://img.shields.io/badge/revision-0.0.5-blue.svg)](https://github.com/vigatron/vhlibrle7b)
+[![Revision](https://img.shields.io/badge/revision-0.1.0-blue.svg)](https://github.com/vigatron/vhlibrle7b)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/vigatron/vhlibrle7b/blob/main/LICENSE)
 [![Language](https://img.shields.io/badge/C%2B%2B-17%2B-orange.svg)](https://isocpp.org/)
 
@@ -21,7 +14,7 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 ## Library Metadata
 
 * **Repository:** [https://github.com/vigatron/vhlibrle7b](https://github.com/vigatron/vhlibrle7b)
-* **Revision:** `0.0.5`
+* **Revision:** `0.1.0`
 * **Main Header:** `src/vhlibrle7b.hpp`
 * **Author:** Viktor Glebov (`V01G04A81`)
 * **Copyright:** © 2026 Viktor Glebov
@@ -31,11 +24,11 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 
 ## Key Features
 
-* **Header-Only:** Zero external dependencies beyond standard C++ headers (`<cstdint>`, `<cstddef>`, `<cstring>`).
+* **Header-Only Core:** Core algorithms are header-only, requires 6 additional header files (`vhlibrle7binc.hpp`, `vhlibrle7berrs.hpp`, `vhlibrle7bmem.hpp`, `vhlibrle7bmreg.hpp`, `vhlibrle7bstrm.hpp`, `vhlibrle7bcrc.hpp`) for full functionality.
 * **Dual-Mode 7-Bit Encoding:** Dynamically splits data streams into **RLE** (run-length) and **Literal (STD)** spans with minimal control overhead.
-* **Integrity Protection:** Computes dual IEEE 802.3 CRC32 checksums for both uncompressed source data and compressed payload.
+* **Integrity Protection:** Computes CRC32 checksums for both uncompressed source data and compressed payload, uses standard polynomial 0xEDB88320.
 * **Hardware Safe:** Built-in address alignment checks prevent unaligned memory access crashes on RISC/ARM platforms.
-* **Configurable Parameters:** Custom thresholds for minimum sequence run-length (`minRLE`) and maximum span length (`maxSIZ`).
+* **Configurable Parameters:** Custom thresholds for minimum sequence run-length (`minRLE`) and maximum span length (`maxRLE`).
 * **Endianness Support** Native little-endian byte ordering.
 
 ---
@@ -45,7 +38,100 @@ It features integrated IEEE 802.3 CRC32 checksums, strict memory bounds checking
 The library provides two distinct API architectures to fit different embedded constraints:
 
 * **BMode (Block Mode):** Memory Block operation. Available since the initial version. Best for in-RAM compression/decompression where both source and destination buffers are fully allocated and aligned.
-* **SMode (Stream Mode):** Byte-per-byte I/O stream. Introduced in **rev 0.0.5**, this callback-oriented API minimizes RAM footprint. Ideal for streaming data directly to/from peripherals (e.g., SPI Flash, SD Card, UART) without buffering the entire payload in RAM.
+* **SMode (Stream Mode):** Byte-per-byte I/O stream. Introduced in **rev 0.0.5**, this callback-oriented API minimizes RAM footprint. Ideal for streaming data directly to/from peripherals (e.g., SPI Flash, SD Card, UART) without buffering the entire payload in RAM. 
+
+**Notes**
+Compression (`pack_SMode`) not implemented, is currently under development (returns `errNotImplemented` in v0.1.0). Empty data not supported.
+
+## API Reference
+
+### Public Methods
+
+| Method | Description |
+|--------|-------------|
+| `VHRLE7b::pack()` | Pack data array using Block Mode |
+| `VHRLE7b::pack_BMode()` | Pack data using Block Mode API |
+| `VHRLE7b::pack_SMode()` | Pack data using Stream Mode API *(Not implemented in v0.1.0)* |
+| `VHRLE7b::unpack()` | Unpack data using Block Mode |
+| `VHRLE7b::unpack_BMode()` | Unpack data using Block Mode API |
+| `VHRLE7b::unpack_SMode()` | Unpack data using Stream Mode API |
+| `VHRLE7b::checkRLE()` | Validate compressed data integrity |
+| `VHRLE7b::checkRLE_BMode()` | Validate compressed data in Block Mode |
+| `VHRLE7b::checkRLE_SMode()` | Validate compressed data in Stream Mode |
+| `VHRLE7b::ptrhdr()` | Get pointer to header structure |
+| `VHRLE7b::isValidHeader()` | Validate header structure |
+
+
+---
+
+## Basic Usage Examples
+
+### Block Mode (BMode) - In-RAM Compression
+
+```cpp
+#include "vhlibrle7b.hpp"
+
+int main() {
+    uint8_t input[] = {0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42};
+    uint8_t output[128];
+    uint8_t decompressed[128];
+    VHRLE7b rle;
+    
+    // 1. Pack data into output buffer
+    verr err = rle.pack(input, sizeof(input), output, sizeof(output), 4, 127);
+    if (err != vok) {
+        // Handle error
+    }
+    
+    // Get actual compressed payload size from the generated header
+    const VHRLE7b::sthdr *hdr = rle.ptrhdr(output);
+    uint32_t total_rle_size = sizeof(VHRLE7b::sthdr) + hdr->rlesize;
+
+    // 2. Unpack data: 
+    // Arguments: (compressed_input, compressed_size, destination_buffer, destination_capacity)
+    verr unerr = rle.unpack(output, total_rle_size, decompressed, sizeof(decompressed));
+    if (unerr != vok) {
+        // Handle error
+    }
+    
+    return 0;
+}
+```
+
+### Stream Mode (SMode) - Low Memory Usage
+
+```cpp
+#include "vhlibrle7b.hpp"
+#include <stdio.h>
+
+// Example callback function `ReadByte` for stream I/O
+bool ReadDataCallback(uint8_t *byte, size_t pos) {
+    // Read byte from peripheral (e.g. SPI Flash / UART) at position 'pos'
+    return true; 
+}
+
+// Example callback function `WriteByte` for stream I/O
+bool WriteDataCallback(uint8_t byte, size_t pos, void * phdr) {
+    // Write decompressed byte to target storage at position 'pos'
+    return true;
+}
+
+int main() {
+
+    VHRLE7b rle;
+    
+    // Pass read and write callbacks directly to the constructor
+    VHRLE7bStreams streams(ReadDataCallback, WriteDataCallback);
+
+    // Unpack data using stream mode (checkrle and checkdst are true by default)
+    verr unerr = rle.unpack_SMode(streams);
+    if (unerr != vok) {
+        // Handle decompression error
+    }
+
+    return 0;
+}
+```
 
 ---
 
@@ -83,6 +169,11 @@ Each data span begins with a 1-byte control header (`ctrl`):
 * C++17 or higher
 * BMode: source and destination buffers must be 32-bit aligned
 * SMode: alignment is not required
+
+### Configuration Limits
+* **minRLE**: Must be ≥ 4 bytes (minimum repeated sequence length)
+* **maxRLE**: Must be in range [4, 127] bytes (maximum span length per byte)
+* **minRLE ≤ maxRLE**: Minimum must not exceed maximum
 
 ### Debug Mode
 To enable verbose `printf` debugging during encoding/decoding, define `DEBUG_VHRLE7B` prior to including the header:

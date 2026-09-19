@@ -1,14 +1,14 @@
 /* ======================================================================================
  * Library       : vhlibrle7b
  * Description   : C++ library implementing a 7-bit Run-Length Encoding (RLE) algorithm
- * Revision      : 0.0.5-rc5
+ * Revision      : 0.1.0
  * Source        : https://github.com/vigatron/vhlibrle7b
  * Disclaimer    : Provided "AS IS", without warranty.
  * License       : MIT
  * File          : src/vhlibrle7b.hpp
- * Content size  : 25338
- * Date / Time   : 17-09-2026 16:17:27
- * MD5           : 2faf44289a11fd464e8f2ed6018f431f
+ * Content size  : 25254
+ * Date / Time   : 19-09-2026 20:18:21
+ * MD5           : e625f936f6349799a435aae462ffdf6d
  * Notes         : MD5 = file content without header/footer
  * Encoding      : UTF-8
  * Author        : Viktor Glebov / V01G04A81
@@ -17,6 +17,9 @@
 #pragma once
 
 #include "vhlibrle7binc.hpp"
+#include "vhlibrle7berrs.hpp"
+#include "vhlibrle7bcrc.hpp"
+#include "vhlibrle7bmem.hpp"
 #include "vhlibrle7bstrm.hpp"
 
 /**
@@ -44,56 +47,6 @@ public:
 
     static_assert(sizeof(sthdr) == 32);
 
-    struct stblockmode
-    {
-        uint8_t *srcptr;
-        size_t srcpos;
-        size_t srcsz;
-
-        uint8_t *dstptr;
-        size_t dstpos;
-        size_t dstsz;
-    };
-
-    enum Status : uint32_t
-    {
-        okstat = 0,
-
-        errSrcMemorySize,
-        errSrcInvalid,
-        errSrcVersion,
-
-        errRLEInvalidHeader,
-        errRLESourceInvalid,
-
-        errDestMemorySize,
-        errSettings,
-        errAlign,
-        errWrite,
-        errOutOfRange,
-        errInternal,
-
-        // Wrong CRC
-        errCRC,
-        errRLECRC,
-        errDSTCRC,
-
-        errNotImplemented,
-        errInvalidCallback,
-        errInvalidRLESource,
-        errWriteError,
-        errUnpackProcessFailed,
-
-        //
-        errBlockModeParams,
-
-        //
-        errIOSource,
-        errIODestination,
-
-        errCheckFailed
-    };
-
     enum ChunkType : uint8_t
     {
         chunkSTD = 0,
@@ -107,18 +60,24 @@ public:
      * @param dstptr Pointer to the output destination buffer (must be 32-bit aligned).
      * @param dstsize Total capacity of the destination buffer in bytes.
      * @param minRLE Minimum repeating sequence length to trigger RLE encoding (must be >= 4).
-     * @param maxSIZ Maximum allowed span size in bytes (must be in range [4, 127]).
+     * @param maxRLE Maximum allowed span size in bytes (must be in range [4, 127]).
      * @return Status::vok on success, or appropriate Status error code on failure.
      */
     verr pack(
         const uint8_t *srcptr,
-        const uint32_t srcsize,
+        uint32_t srcsize,
         uint8_t *dstptr,
-        const uint32_t dstsize,
-        const uint8_t minRLE,
-        const uint8_t maxSIZ)
+        uint32_t dstsize,
+        uint8_t minRLE = 4,
+        uint8_t maxRLE = 127)
     {
-        return pack_BMode(srcptr, srcsize, dstptr, dstsize, minRLE, maxSIZ);
+        //
+        uint8_t *pbin = const_cast<uint8_t *>(srcptr);
+
+        VHRLE7bMemRegion inpmem(pbin, srcsize);
+        VHRLE7bMemRegion outmem(dstptr, dstsize);
+        VHRLE7bMemRegions regions(inpmem, outmem);
+        return pack_BMode(regions, minRLE, maxRLE);
     }
 
     /**
@@ -132,7 +91,7 @@ public:
      * @param[out] dstptr   Pointer to the output destination buffer (must be 32-bit aligned).
      * @param[in]  dstsize  Total capacity of the destination buffer in bytes.
      * @param[in]  minRLE   Minimum repeating sequence length to trigger RLE encoding (must be >= 4).
-     * @param[in]  maxSIZ   Maximum allowed span size in bytes (must be in range [4, 127]).
+     * @param[in]  maxRLE   Maximum allowed span size in bytes (must be in range [4, 127]).
      *
      * @return Status::vok on success, or an appropriate Status error code on failure:
      *         - errDestMemorySize : Destination buffer is too small to fit the header.
@@ -141,131 +100,91 @@ public:
      *         - errWrite          : Compressed data exceeded destination buffer bounds.
      */
     verr pack_BMode(
-        const uint8_t *srcptr,
-        const uint32_t srcsize,
-        uint8_t *dstptr,
-        const uint32_t dstsize,
-        const uint8_t minRLE,
-        const uint8_t maxSIZ)
+        VHRLE7bMemRegions &regions,
+        uint8_t minRLE = 4,
+        uint8_t maxRLE = 127)
     {
+        // Check src region before processing
+        if (!regions.src().size())
+            return verror(VHRLE7BERR::errSrcMemorySize);
 
-        // Check before processing
-        if (dstsize < sizeof(sthdr))
-            return errDestMemorySize;
-        if (minRLE < 4)
-            return errSettings;
-        if (maxSIZ < 4 || maxSIZ >= 128)
-            return errSettings;
-        if (!checkalign(srcptr))
-            return errAlign;
-        if (!checkalign(dstptr))
-            return errAlign;
+        // Check dst region before processing
+        if (regions.dst().size() < sizeof(sthdr))
+            return verror(VHRLE7BERR::errDestMemorySize);
+
+        // Check pack parameters
+        if (minRLE > maxRLE)
+            return verror(VHRLE7BERR::errSettings);
+        if (minRLE < 4 || minRLE > 127)
+            return verror(VHRLE7BERR::errSettings);
+        if (maxRLE < 4 || maxRLE > 127)
+            return verror(VHRLE7BERR::errSettings);
+
+        // Check align
+        if (!regions.src().checkalign())
+            return verror(VHRLE7BERR::errAlign);
+        if (!regions.dst().checkalign())
+            return verror(VHRLE7BERR::errAlign);
 
         // Setup writer
-        uint8_t *ptrbin = dstptr + sizeof(sthdr);
-        uint32_t wrleft = dstsize - sizeof(sthdr);
+        if (vok != regions.dst().setpos(sizeof(sthdr)))
+            return verror(VHRLE7BERR::errDestMemorySize);
+
         uint32_t spans_count = 0;
         uint32_t stdcnt = 0;
 
-        // Safe byte writer lambda
-        auto putbyte = [&](uint8_t v) -> bool
-        {
-            if (wrleft == 0)
-                return false;
-            wrleft--;
-            *ptrbin++ = v;
-            return true;
-        };
-
-        // RLE span writer lambda
-        auto writerle = [&](size_t pos, uint8_t cnt, uint8_t sym) -> bool
-        {
-#if defined(DEBUG_VHRLE7B)
-            printf("Write RLE @ %d  `%d`x%d\n", (int)pos, sym, (int)cnt);
-#endif
-            if (!putbyte(0x80 | cnt))
-                return false;
-            if (!putbyte(sym))
-                return false;
-            spans_count++;
-            return true;
-        };
-
-        // Literal (STD) span writer lambda
-        auto writestd = [&](size_t pos, uint8_t cnt, const uint8_t *pbin) -> bool
-        {
-#if defined(DEBUG_VHRLE7B)
-            printf("Write STD @ %d x%d :", (int)pos, (int)cnt);
-#endif
-            if (!putbyte(cnt))
-                return false;
-            for (uint8_t i = 0; i < cnt; i++)
-            {
-#if defined(DEBUG_VHRLE7B)
-                printf(" %d", pbin[i]);
-#endif
-                if (!putbyte(pbin[i]))
-                    return false;
-            }
-            spans_count++;
-#if defined(DEBUG_VHRLE7B)
-            printf("\n");
-#endif
-            return true;
-        };
-
         // Main processing loop
-        for (uint32_t i = 0; i < srcsize;)
+        for (uint32_t i = 0; i < regions.src().size();)
         {
-
-            uint32_t scnt = calcDubsCount(srcptr + i, srcsize - i);
+            uint32_t scnt = calcDubsCount(regions.src().ptr() + i, regions.src().size() - i);
 
             if (scnt >= minRLE)
             {
-
                 // Force store STD spans if avail
                 while (stdcnt)
                 {
-                    size_t wrcnt = (stdcnt > maxSIZ) ? maxSIZ : stdcnt;
-                    if (!writestd(i - stdcnt, wrcnt, srcptr + (i - stdcnt)))
-                        return errWrite;
+                    size_t wrcnt = (stdcnt > maxRLE) ? maxRLE : stdcnt;
+                    if (vok != writestd(regions.dst(), i - stdcnt, wrcnt, regions.src().ptr() + (i - stdcnt)))
+                        return verror(VHRLE7BERR::errWrite);
+                    spans_count++;
                     stdcnt -= wrcnt;
                 }
 
                 // Store RLE spans
                 while (scnt)
                 {
-                    size_t wrcnt = (scnt > maxSIZ) ? maxSIZ : scnt;
-                    if (!writerle(i, wrcnt, srcptr[i]))
-                        return errWrite;
+                    size_t wrcnt = (scnt > maxRLE) ? maxRLE : scnt;
+                    if (vok != writerle(regions.dst(), i, wrcnt, regions.src().ptr()[i]))
+                        return verror(VHRLE7BERR::errWrite);
+                    spans_count++;
                     scnt -= wrcnt;
                     i += wrcnt;
                 }
             }
             else
             {
-
                 stdcnt += scnt;
                 i += scnt;
 
                 // Store STD
-                while (stdcnt >= maxSIZ)
+                while (stdcnt >= maxRLE)
                 {
-                    if (!writestd(i - stdcnt, maxSIZ, srcptr + (i - stdcnt)))
-                        return errWrite;
-                    stdcnt -= maxSIZ;
+                    if (vok != writestd(regions.dst(), i - stdcnt, maxRLE, regions.src().ptr() + (i - stdcnt)))
+                        return verror(VHRLE7BERR::errWrite);
+                    spans_count++;
+                    stdcnt -= maxRLE;
                 }
 
                 // EOF ? (i++ already)
-                if (i == srcsize)
+                if (i == regions.src().size())
                 {
-
                     // Force store STD spans if avail
                     while (stdcnt)
                     {
-                        size_t wrcnt = (stdcnt > maxSIZ) ? maxSIZ : stdcnt;
-                        if (!writestd(i - stdcnt, wrcnt, srcptr + (i - stdcnt)))
-                            return errWrite;
+                        size_t wrcnt = (stdcnt > maxRLE) ? maxRLE : stdcnt;
+                        if (vok != writestd(regions.dst(), i - stdcnt, wrcnt, regions.src().ptr() + (i - stdcnt)))
+                            return verror(VHRLE7BERR::errWrite);
+                        spans_count++;
                         stdcnt -= wrcnt;
                     }
                 }
@@ -273,20 +192,23 @@ public:
         }
 
         // Compute payload size
-        uint32_t compressed_data_size = (dstsize - sizeof(sthdr)) - wrleft;
+        uint32_t compressed_data_size = (regions.dst().size() - sizeof(sthdr)) - regions.dst().bytesleft();
 
         // Copy header to destination buffer start
         sthdr hdr;
         std::memcpy(hdr.pfx, get_hdrpfx(), sizeof(hdr.pfx));
         hdr.spans = spans_count;
-        hdr.srcsize = srcsize;
-        hdr.crc32src = calcBlockCRC32(srcptr, srcsize);
+
+        hdr.srcsize = regions.src().size();
+        hdr.crc32src = VHRLE7bCRC32::calcBlockCRC32(regions.src().ptr(), hdr.srcsize);
+
         hdr.rlesize = compressed_data_size;
-        hdr.crc32rle = calcBlockCRC32(dstptr + sizeof(sthdr), compressed_data_size);
+        hdr.crc32rle = VHRLE7bCRC32::calcBlockCRC32(regions.dst().ptr() + sizeof(sthdr), compressed_data_size);
+
         hdr.reserved = 0;
 
         // Copy header to destination buffer start
-        std::memcpy(dstptr, &hdr, sizeof(sthdr));
+        std::memcpy(regions.dst().ptr(), &hdr, sizeof(sthdr));
 
         // Return result
         return vok;
@@ -299,7 +221,7 @@ public:
      */
     verr pack_SMode(VHRLE7bStreams &streams)
     {
-        return verror(errNotImplemented);
+        return verror(VHRLE7BERR::errNotImplemented);
     }
 
     /**
@@ -308,9 +230,10 @@ public:
      * @param rleblksize Total size of the compressed block in bytes.
      * @return Status::vok if valid, error code otherwise.
      */
-    verr checkRLE(const uint8_t *ptrrle, const uint32_t rleblksize)
+    verr checkRLE(uint8_t *ptrrle, const uint32_t rleblksize)
     {
-        return checkRLE_BMode(ptrrle, rleblksize);
+        VHRLE7bMemRegion mem(ptrrle, rleblksize);
+        return checkRLE_BMode(mem);
     }
 
     /**
@@ -320,35 +243,33 @@ public:
      * @return Status::vok if valid, error code otherwise
      *          (errAlign, errSrcMemorySize, errSrcVersion, errSrcInvalid, errCRC).
      */
-    verr checkRLE_BMode(const uint8_t *ptrrle, const uint32_t rleblksize)
+    verr checkRLE_BMode(VHRLE7bMemRegion &mem)
     {
-
-        if (!checkalign(ptrrle))
-            return errAlign;
+        if (!mem.checkalign())
+            return verror(VHRLE7BERR::errAlign);
 
         // Check limit
-        if (rleblksize < sizeof(sthdr))
-            return errSrcMemorySize;
+        if (mem.size() < sizeof(sthdr))
+            return verror(VHRLE7BERR::errSrcMemorySize);
 
-        const VHRLE7b::sthdr *phdr = (VHRLE7b::sthdr *)ptrrle;
+        const VHRLE7b::sthdr *phdr = (VHRLE7b::sthdr *)mem.ptr();
 
         if (isValidHeader(phdr) != vok)
-            return verror(errRLEInvalidHeader);
+            return verror(VHRLE7BERR::errRLEInvalidHeader);
 
         // Check rlesrc size
-        if (rleblksize - sizeof(sthdr) != phdr->rlesize)
-            return errSrcMemorySize;
+        if (mem.size() - sizeof(sthdr) != phdr->rlesize)
+            return verror(VHRLE7BERR::errSrcMemorySize);
 
         // Check CRC
-        uint32_t crcrle = calcBlockCRC32(ptrrle + sizeof(sthdr), phdr->rlesize);
+        uint32_t crcrle = VHRLE7bCRC32::calcBlockCRC32(mem.ptr() + sizeof(sthdr), phdr->rlesize);
         bool checkcrc = crcrle == phdr->crc32rle;
-        return checkcrc ? vok : verror(errCRC);
+        return checkcrc ? vok : verror(VHRLE7BERR::errCRC);
     }
 
     /**
      * @brief Check RLE stream integrity / CRC of RLE data block without header
-     * @param funcIn Callback function for reading input data
-     * @param funcOut Callback function for writing output data
+     * @param streams VHRLE7bStreams reference for stream operations
      * @param phdr Pointer to header structure for validation
      * @return Status::vok if valid, or appropriate error code otherwise
      */
@@ -356,10 +277,10 @@ public:
     {
         uint32_t crc_rle;
         if (!calcCRC32_SIn(streams, sizeof(sthdr), phdr->rlesize, &crc_rle))
-            return verror(errRLESourceInvalid);
+            return verror(VHRLE7BERR::errRLESourceInvalid);
 
         if (crc_rle != phdr->crc32rle)
-            return verror(errInvalidRLESource);
+            return verror(VHRLE7BERR::errInvalidRLESource);
 
         return vok;
     }
@@ -367,104 +288,97 @@ public:
     /**
      * @brief Decompresses a VHRLE7b encoded data in Block mode API and validates CRC32 checksums.
      * @param ptrsrc Pointer to the source compressed data block.
-     * @param srcsize Size of the source compressed data block in bytes.
+     * @param rlesize Size of the source compressed data block in bytes.
      * @param ptrdst Pointer to the destination output buffer.
      * @param dstsize Maximum capacity of the destination buffer in bytes.
      * @return Status::vok on success, or appropriate Status error code on failure.
      */
     verr unpack(
-        const uint8_t *pRLEbin,
-        uint32_t srcsize,
+        uint8_t *pRLEbin,
+        uint32_t rlesize,
         uint8_t *pBINout,
         uint32_t dstsize)
     {
-
-        stblockmode sblk;
-
-        sblk.srcptr = const_cast<uint8_t *>(pRLEbin);
-        sblk.srcpos = 0;
-        sblk.srcsz = srcsize;
-
-        sblk.dstptr = const_cast<uint8_t *>(pBINout);
-        sblk.dstpos = 0;
-        sblk.dstsz = dstsize;
-
-        return unpack_BMode(sblk);
+        VHRLE7bMemRegion inpmem(pRLEbin, rlesize);
+        VHRLE7bMemRegion outmem(pBINout, dstsize);
+        VHRLE7bMemRegions memregions(inpmem, outmem);
+        return unpack_BMode(memregions);
     }
 
     /**
      * @brief Decompress RLE block / `memory block` mode
-     * @param pRLEbin Pointer to compressed RLE data block
-     * @param srcsize Size of source compressed data block in bytes
-     * @param pDATbin Pointer to destination output buffer
-     * @param dstsize Maximum capacity of destination buffer in bytes
+     * @param mem VHRLE7bMemRegions reference for source/destination buffers
+     * @param checkrle Check RLE source block before decompression (default: true)
+     * @param checkdst Check destination CRC32 after decompression (default: true)
      * @return Status::vok on success, or appropriate error code on failure
      */
-    verr unpack_BMode(stblockmode &sblk, bool checkrle = true, bool checkdst = true)
+    verr unpack_BMode(VHRLE7bMemRegions &mem, bool checkrle = true, bool checkdst = true)
     {
         // Check alignment
-        if (vok != checkBlockRegions(sblk))
-            return verror(errBlockModeParams);
+        if (vok != checkBlockRegions(mem))
+            return verror(VHRLE7BERR::errBlockModeParams);
 
-        const sthdr *phdr = ptrhdr(sblk.srcptr);
+        const sthdr *phdr = ptrhdr(mem.src().ptr());
 
         if (isValidHeader(phdr) != vok)
-            return verror(errRLEInvalidHeader);
+            return verror(VHRLE7BERR::errRLEInvalidHeader);
 
         // Check RLE source block size
-        if (sblk.srcsz - sizeof(sthdr) != phdr->rlesize)
-            return errSrcInvalid;
+        if (mem.src().size() - sizeof(sthdr) != phdr->rlesize)
+            return verror(VHRLE7BERR::errSrcInvalid);
 
         // Not enough output buffer space for decompressed data
-        if (sblk.dstsz < phdr->srcsize)
-            return verror(errDestMemorySize);
+        if (mem.dst().size() < phdr->srcsize)
+            return verror(VHRLE7BERR::errDestMemorySize);
 
         // Check RLE CRC
         if (checkrle)
         {
-            uint32_t crcrle = calcBlockCRC32(sblk.srcptr + sizeof(sthdr), phdr->rlesize);
+            uint32_t crcrle = VHRLE7bCRC32::calcBlockCRC32(mem.src().ptr() + sizeof(sthdr), phdr->rlesize);
             if (crcrle != phdr->crc32rle)
-                return verror(errRLECRC);
+                return verror(VHRLE7BERR::errRLECRC);
         }
 
-        sblk.srcpos += sizeof(sthdr);
+        // Set reader pos
+        if (vok != mem.src().setpos(sizeof(sthdr)))
+            return verror(VHRLE7BERR::errSrcMemorySize);
 
         uint32_t spanscnt = phdr->spans;
 
         while (spanscnt--)
         {
             uint8_t cbyte;
-            if (vok != readDataByte_BMode(sblk, &cbyte))
-                return verror(errRLESourceInvalid);
+            if (vok != mem.src().readByte(&cbyte))
+                return verror(VHRLE7BERR::errRLESourceInvalid);
 
             uint8_t cnt = cbyte & 0x7F;
             if (cnt == 0)
-                return verror(errInternal);
+                return verror(VHRLE7BERR::errInternal);
 
             ChunkType ctype = (ChunkType)(cbyte >> 7);
 
             if (ctype == chunkRLE)
             {
-                if (vok != unpack_RLEChunk_BMode(sblk, cnt))
-                    return verror(errIOSource);
+                if (vok != unpack_RLEChunk_BMode(mem, cnt))
+                    return verror(VHRLE7BERR::errIOSource);
             }
             else
             {
-                if (vok != unpack_STDChunk_BMode(sblk, cnt))
-                    return verror(errIODestination);
+                if (vok != unpack_STDChunk_BMode(mem, cnt))
+                    return verror(VHRLE7BERR::errIODestination);
             }
         }
 
         // Verify uncompressed byte count matches header
-        if (sblk.dstpos != phdr->srcsize)
-            return verror(errInternal);
+        if (mem.dst().getpos() != phdr->srcsize)
+            return verror(VHRLE7BERR::errInternal);
 
-        // Check results CRC32
+        // Check CRC32 of unpacked region
         if (checkdst)
         {
-            uint32_t crc = calcBlockCRC32(sblk.dstptr, phdr->srcsize);
+            uint32_t crc = VHRLE7bCRC32::calcBlockCRC32(mem.dst().ptr(), phdr->srcsize);
             if (crc != phdr->crc32src)
-                return verror(errDSTCRC);
+                return verror(VHRLE7BERR::errDSTCRC);
         }
 
         return vok;
@@ -472,32 +386,39 @@ public:
 
     /**
      * @brief Unpack RLE data array in `Stream Mode`
-     * @param funcIn Callback function for reading input data
-     * @param funcOut Callback function for writing output data
-     * @param checkbefore Optional flag to check before unpacking (default: true)
+     * @param streams VHRLE7bStreams reference for stream operations.
+     * @param checkrle Check RLE source block before unpacking (default: true)
+     * @param checkdst Check destination CRC32 after unpacking (default: true)
      * @return Status::vok on success, or appropriate error code on failure
      */
     verr unpack_SMode(VHRLE7bStreams &streams, bool checkrle = true, bool checkdst = true)
     {
         // Callbacks initialized ?
         if (!streams.isInitialized())
-            return verror(errInternal);
+            return verror(VHRLE7BERR::errInternal);
 
         //
         sthdr hdr;
 
         // Extract header
         if (readHeader_SMode(streams, &hdr) != vok)
-            return verror(errRLESourceInvalid);
+            return verror(VHRLE7BERR::errRLESourceInvalid);
 
         // Check RLE source block first
         if (checkrle)
         {
             if (checkRLE_SMode(streams, &hdr) != vok)
-                return verror(errCheckFailed);
+                return verror(VHRLE7BERR::errCheckFailed);
         }
 
+        // Setup Input stream
+        streams.ResetRdCRC();
+        streams.EnableRdCRC(false);
         streams.SetRStreamPos(sizeof(sthdr));
+
+        // Setup Output stream
+        streams.ResetWrCRC();
+        streams.EnableWrCRC(checkdst);
         streams.SetWStreamPos(0);
 
         uint32_t spanscnt = hdr.spans;
@@ -506,33 +427,37 @@ public:
         {
             uint8_t cbyte;
             if (!streams.readbyte(&cbyte))
-                return verror(errRLESourceInvalid);
+                return verror(VHRLE7BERR::errRLESourceInvalid);
 
             uint8_t cnt = cbyte & 0x7F;
             if (cnt == 0)
-                return errInternal;
+                return VHRLE7BERR::errInternal;
 
             ChunkType ctype = (ChunkType)(cbyte >> 7);
 
             if (ctype == chunkRLE)
             {
                 if (vok != unpack_RLEChunk_SMode(streams, &hdr, cnt))
-                    return verror(errWriteError);
+                    return verror(VHRLE7BERR::errWriteError);
             }
             else
             {
                 if (vok != unpack_STDChunk_SMode(streams, &hdr, cnt))
-                    return verror(errWriteError);
+                    return verror(VHRLE7BERR::errWriteError);
             }
         }
 
         if (streams.GetRStreamPos() != (hdr.rlesize + sizeof(sthdr)))
-            return verror(errUnpackProcessFailed);
+            return verror(VHRLE7BERR::errUnpackProcessFailed);
 
         if (streams.GetWStreamPos() != hdr.srcsize)
-            return verror(errUnpackProcessFailed);
+            return verror(VHRLE7BERR::errUnpackProcessFailed);
 
-        // CRC Check ?
+        // CRC Check
+        if (checkdst)
+            if (!streams.CheckWrCRC(hdr.crc32src))
+                return verror(VHRLE7BERR::errCRC);
+
         return vok;
     }
 
@@ -557,15 +482,15 @@ public:
         // Check pfx
         for (size_t i = 0; i < sizeof(sthdr::pfx); i++)
             if (phdr->pfx[i] != get_hdrpfx()[i])
-                return verror(errSrcInvalid);
+                return verror(VHRLE7BERR::errSrcInvalid);
 
         // version check
         if (phdr->reserved != 0)
-            return errSrcVersion;
+            return verror(VHRLE7BERR::errSrcVersion);
 
         // Spans non-zero ?
         if (!phdr->spans)
-            return verror(errSrcInvalid);
+            return verror(VHRLE7BERR::errSrcInvalid);
 
         return vok;
     }
@@ -583,7 +508,7 @@ private:
     /**
      * @brief Calculate duplicate count starting from pointer
      * @param ptr Pointer to the start of the byte sequence
-     * @param sz Size of the sequence in bytes
+     * @param sz Size of the sequence in bytes (type: size_t)
      * @return Number of consecutive identical bytes
      */
     size_t calcDubsCount(const uint8_t *ptr, size_t sz)
@@ -603,51 +528,20 @@ private:
     }
 
     /**
-     * @brief Calculate CRC32 checksum for a block of data.
-     * @param data Pointer to the data buffer.
-     * @param len Size of the data buffer in bytes.
-     * @param crc Initial CRC value (default: 0xFFFFFFFF).
-     * @return Calculated CRC32 value.
-     */
-    uint32_t calcBlockCRC32(
-        const uint8_t *data,
-        size_t len,
-        uint32_t crc = 0xFFFFFFFF)
-    {
-        while (len--)
-        {
-            crc ^= *data++;
-            for (int i = 0; i < 8; i++)
-                crc = (crc >> 1) ^ (0xEDB88320 & -(crc & 1));
-        }
-        return ~crc;
-    }
-
-    /**
-     * @brief Check if a pointer is 4-byte aligned.
-     * @param ptr Pointer to check.
-     * @return true if aligned, false otherwise.
-     */
-    bool checkalign(const uint8_t *ptr)
-    {
-        return !(reinterpret_cast<uintptr_t>(ptr) % sizeof(uint32_t));
-    }
-
-    /**
      * @brief Validate block mode parameters (alignment and size)
      * @param sblk stblockmode reference for source/destination buffers
      * @return Status::vok if valid, or appropriate Status error code
      */
-    verr checkBlockRegions(const stblockmode &sblk)
+    verr checkBlockRegions(const VHRLE7bMemRegions &regions)
     {
-        if (sblk.srcsz < sizeof(sthdr))
-            return verror(errRLESourceInvalid);
+        if (regions.src().size() < sizeof(sthdr))
+            return verror(VHRLE7BERR::errRLESourceInvalid);
 
-        if (!checkalign(sblk.srcptr))
-            return verror(errAlign);
+        if (!regions.src().checkalign())
+            return verror(VHRLE7BERR::errAlign);
 
-        if (!checkalign(sblk.dstptr))
-            return verror(errAlign);
+        if (!regions.dst().checkalign())
+            return verror(VHRLE7BERR::errAlign);
 
         return vok;
     }
@@ -690,43 +584,70 @@ private:
     // -----------------------------
 
     /**
-     * @brief Read single byte from compressed RLE block
-     * @param blk stblockmode reference for source/destination buffers
-     * @param pbyte Pointer to output buffer
-     * @return Status::vok on success, or appropriate Status error code
+     * RLE span writer
      */
-    verr readDataByte_BMode(stblockmode &blk, uint8_t *pbyte)
+    verr writerle(VHRLE7bMemRegion &mem, size_t pos, uint8_t cnt, uint8_t sym)
     {
-        // Validate stream boundaries
-        if (blk.srcpos >= blk.srcsz)
-            return verror(errOutOfRange);
+#if defined(DEBUG_VHRLE7B)
+        printf("Write RLE @ %d  `%d`x%d\n", (int)pos, sym, (int)cnt);
+#endif
+        if (vok != mem.writebyte(0x80 | cnt))
+            return verror(VHRLE7BERR::errIODestination);
 
-        *pbyte = blk.srcptr[blk.srcpos++];
+        if (vok != mem.writebyte(sym))
+            return verror(VHRLE7BERR::errIODestination);
+
         return vok;
-    }
+    };
+
+    /**
+     * Literal (STD) span writer
+     */
+    verr writestd(VHRLE7bMemRegion &mem, size_t pos, uint8_t cnt, const uint8_t *pbin)
+    {
+#if defined(DEBUG_VHRLE7B)
+        printf("Write STD @ %d x%d :", (int)pos, (int)cnt);
+#endif
+        if (vok != mem.writebyte(cnt))
+            return verror(VHRLE7BERR::errIODestination);
+
+        for (uint8_t i = 0; i < cnt; i++)
+        {
+#if defined(DEBUG_VHRLE7B)
+            printf(" %d", pbin[i]);
+#endif
+            if (vok != mem.writebyte(pbin[i]))
+                return verror(VHRLE7BERR::errIODestination);
+        }
+
+#if defined(DEBUG_VHRLE7B)
+        printf("\n");
+#endif
+        return vok;
+    };
 
     /**
      * @brief Unpack RLE chunk with count `cnt` into destination buffer
-     * @param blk stblockmode reference for source/destination buffers
+     * @param mem VHRLE7bMemRegions reference for source/destination buffers
      * @param cnt Number of bytes to copy from the RLE symbol
      * @return Status::vok on success, or appropriate error code on failure
      */
-    verr unpack_RLEChunk_BMode(stblockmode &blk, uint8_t cnt)
+    verr unpack_RLEChunk_BMode(VHRLE7bMemRegions &mem, uint8_t cnt)
     {
         showline_RLE_cnt(cnt);
 
-        // Enough in writer ?
-        if ((blk.dstpos + cnt) > blk.dstsz)
-            return errDestMemorySize;
-
         uint8_t sym;
-        if (vok != readDataByte_BMode(blk, &sym))
-            return verror(errRLESourceInvalid);
+        if (vok != mem.src().readByte(&sym))
+            return verror(VHRLE7BERR::errRLESourceInvalid);
+
+        // Enough in writer ?
+        if (mem.dst().bytesleft() < cnt)
+            return verror(VHRLE7BERR::errDestMemorySize);
 
         // Write sequence
         for (uint8_t i = 0; i < cnt; i++)
         {
-            blk.dstptr[blk.dstpos++] = sym;
+            mem.dst().writebyte(sym);
         }
 
         return vok;
@@ -738,22 +659,28 @@ private:
      * @param cnt Number of bytes to copy from source directly
      * @return Status::vok on success, or appropriate error code on failure
      */
-    verr unpack_STDChunk_BMode(stblockmode &blk, uint8_t cnt)
+    verr unpack_STDChunk_BMode(VHRLE7bMemRegions &mem, uint8_t cnt)
     {
         showline_STD_cnt(cnt);
 
         // Enough in reader ?
-        if ((blk.srcpos + cnt) > blk.srcsz)
-            return errSrcMemorySize;
+        if (mem.src().bytesleft() < cnt)
+            return verror(VHRLE7BERR::errSrcMemorySize);
 
         // Enough in writer ?
-        if ((blk.dstpos + cnt) > blk.dstsz)
-            return errDestMemorySize;
+        if (mem.dst().bytesleft() < cnt)
+            return verror(VHRLE7BERR::errDestMemorySize);
+
+        uint8_t sym;
 
         // Unpack STD chunk
         for (uint8_t i = 0; i < cnt; i++)
         {
-            blk.dstptr[blk.dstpos++] = blk.srcptr[blk.srcpos++];
+            if (vok != mem.src().readByte(&sym))
+                return verror(VHRLE7BERR::errSrcMemorySize);
+
+            if (vok != mem.dst().writebyte(sym))
+                return verror(VHRLE7BERR::errDestMemorySize);
         }
 
         return vok;
@@ -777,11 +704,11 @@ private:
         {
             bool rd = streams.readbyte(((uint8_t *)phdr) + i);
             if (!rd)
-                return verror(errRLEInvalidHeader);
+                return verror(VHRLE7BERR::errRLEInvalidHeader);
         }
 
         if (isValidHeader(phdr) != vok)
-            return verror(errRLEInvalidHeader);
+            return verror(VHRLE7BERR::errRLEInvalidHeader);
 
         return vok;
     }
@@ -800,12 +727,12 @@ private:
         showline_RLE_cnt(cnt);
 
         if (!streams.readbyte(&sym))
-            return verror(errRLESourceInvalid);
+            return verror(VHRLE7BERR::errRLESourceInvalid);
 
         for (uint8_t i = 0; i < cnt; i++)
         {
             if (!streams.writebyte(sym, phdr))
-                return verror(errWriteError);
+                return verror(VHRLE7BERR::errWriteError);
         }
 
         return vok;
@@ -827,10 +754,10 @@ private:
         for (uint8_t i = 0; i < cnt; i++)
         {
             if (!streams.readbyte(&sym))
-                return verror(errRLESourceInvalid);
+                return verror(VHRLE7BERR::errRLESourceInvalid);
 
             if (!streams.writebyte(sym, phdr))
-                return verror(errWriteError);
+                return verror(VHRLE7BERR::errWriteError);
         }
 
         return vok;
@@ -866,9 +793,9 @@ private:
 /* ========================[  END FILE CONTENT  ]========================
  * Library          : vhlibrle7b
  * File             : src/vhlibrle7b.hpp
- * Revision         : 0.0.5-rc5
- * Content size     : 25338
- * Date / Time      : 17-09-2026 16:17:27
- * MD5              : 2faf44289a11fd464e8f2ed6018f431f
+ * Revision         : 0.1.0
+ * Content size     : 25254
+ * Date / Time      : 19-09-2026 20:18:21
+ * MD5              : e625f936f6349799a435aae462ffdf6d
  * Copyright        : © 2026 Viktor Glebov
  * ====================================================================== */

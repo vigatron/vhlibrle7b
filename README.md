@@ -105,13 +105,13 @@ int main() {
 #include <stdio.h>
 
 // Example callback function `ReadByte` for stream I/O
-bool ReadDataCallback(uint8_t *byte, uint32_t pos) {
+bool ReadDataCallback(uint8_t *byte, size_t pos) {
     // Read byte from peripheral (e.g. SPI Flash / UART) at position 'pos'
     return true; 
 }
 
 // Example callback function `WriteByte` for stream I/O
-bool WriteDataCallback(uint8_t byte, uint32_t pos, void * phdr) {
+bool WriteDataCallback(uint8_t byte, size_t pos, void * phdr) {
     // Write decompressed byte to target storage at position 'pos'
     return true;
 }
